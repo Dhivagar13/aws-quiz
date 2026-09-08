@@ -1,8 +1,8 @@
 import { useEffect, useState, useMemo } from "react";
 import type { CSSProperties, FormEvent } from "react";
-import { getIdTokenResult, onAuthStateChanged, signInWithEmailAndPassword, signOut } from "firebase/auth";
+import type { Auth } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
-import { auth, db, isFirebaseConfigured } from "../lib/firebase";
+import { db, firebaseApp, isFirebaseConfigured, loadAdminAuth } from "../lib/firebase";
 import { useQuestions, type QuestionStatus, type Question } from "../hooks/useQuestions";
 import { timeAgo } from "../lib/format";
 import {
@@ -28,7 +28,8 @@ export default function Admin() {
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
-  const [authChecking, setAuthChecking] = useState(() => Boolean(isFirebaseConfigured && auth && db));
+  const [authInstance, setAuthInstance] = useState<Auth | null>(null);
+  const [authChecking, setAuthChecking] = useState(() => Boolean(isFirebaseConfigured && firebaseApp && db));
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -38,45 +39,65 @@ export default function Admin() {
   const [search, setSearch] = useState("");
 
   useEffect(() => {
-    if (!isFirebaseConfigured || !auth || !db) {
+    if (!isFirebaseConfigured || !db || !firebaseApp) {
       return;
     }
-    const unsub = onAuthStateChanged(auth, (user) => {
-      void (async () => {
-        if (!user || !db) {
-          setIsAdmin(false);
-          setUserEmail(null);
-          setAuthChecking(false);
-          return;
-        }
-        try {
-          // Admin if custom claim is_admin == true OR admins/{uid} doc exists.
-          const token = await getIdTokenResult(user, true).catch(() => getIdTokenResult(user));
-          const claimAdmin = (token.claims as Record<string, unknown>).is_admin === true;
-          if (claimAdmin) {
-            setIsAdmin(true);
-          } else {
-            const snap = await getDoc(doc(db, "admins", user.uid));
-            setIsAdmin(snap.exists());
-          }
-          setUserEmail(user.email);
-        } catch {
-          setIsAdmin(false);
-          setUserEmail(user.email);
-        } finally {
-          setAuthChecking(false);
-        }
-      })();
-    });
-    return () => unsub();
+    let cancelled = false;
+    let unsub: (() => void) | undefined;
+    void (async () => {
+      try {
+        // Lazy-load firebase/auth only on /admin so / and /wall never
+        // trigger Identity Toolkit getProjectConfig or fetch iframe.js.
+        const auth = await loadAdminAuth();
+        if (cancelled) return;
+        setAuthInstance(auth);
+        const { getIdTokenResult, onAuthStateChanged } = await import("firebase/auth");
+        if (cancelled) return;
+        unsub = onAuthStateChanged(auth, (user) => {
+          void (async () => {
+            if (!user || !db) {
+              setIsAdmin(false);
+              setUserEmail(null);
+              setAuthChecking(false);
+              return;
+            }
+            try {
+              // Admin if custom claim is_admin == true OR admins/{uid} doc exists.
+              const token = await getIdTokenResult(user, true).catch(() => getIdTokenResult(user));
+              const claimAdmin = (token.claims as Record<string, unknown>).is_admin === true;
+              if (claimAdmin) {
+                setIsAdmin(true);
+              } else {
+                const snap = await getDoc(doc(db, "admins", user.uid));
+                setIsAdmin(snap.exists());
+              }
+              setUserEmail(user.email);
+            } catch {
+              setIsAdmin(false);
+              setUserEmail(user.email);
+            } finally {
+              setAuthChecking(false);
+            }
+          })();
+        });
+      } catch {
+        if (!cancelled) setAuthChecking(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+      unsub?.();
+    };
   }, []);
 
   async function handleSignIn(e: FormEvent): Promise<void> {
     e.preventDefault();
-    if (!auth) return;
     setAuthBusy(true);
     setAuthError(null);
     try {
+      const auth = authInstance ?? (await loadAdminAuth());
+      if (!authInstance) setAuthInstance(auth);
+      const { signInWithEmailAndPassword } = await import("firebase/auth");
       await signInWithEmailAndPassword(auth, email.trim(), password);
       setPassword("");
     } catch (err) {
@@ -87,7 +108,10 @@ export default function Admin() {
   }
 
   async function handleSignOut(): Promise<void> {
-    if (auth) await signOut(auth);
+    if (authInstance) {
+      const { signOut } = await import("firebase/auth");
+      await signOut(authInstance);
+    }
     setIsAdmin(false);
     setUserEmail(null);
   }
