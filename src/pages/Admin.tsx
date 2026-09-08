@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { FormEvent } from "react";
+import type { CSSProperties, FormEvent } from "react";
 import { getIdTokenResult, onAuthStateChanged, signInWithEmailAndPassword, signOut } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 import { auth, db, isFirebaseConfigured } from "../lib/firebase";
@@ -160,8 +160,8 @@ export default function Admin() {
       <section aria-label="Pending queue" className="queue">
         <h2>Pending ({pending.length})</h2>
         {pending.length === 0 && <div className="panel"><p className="lede">Queue is clear.</p></div>}
-        {pending.map((q) => (
-          <div key={q.id} className="card">
+        {pending.map((q, i) => (
+          <div key={q.id} className="card glass-card enter" style={{ "--d": `${Math.min(i, 8) * 60}ms` } as CSSProperties}>
             <div className="card-top"><span className="handle">{q.display_handle}</span><span className="meta">{new Date(q.created_at).toLocaleString()}</span></div>
             <div className="card-body">{q.body}</div>
             <div className="admin-bar">
@@ -173,10 +173,10 @@ export default function Admin() {
         ))}
       </section>
 
-      <section aria-label="Live" className="queue">
-        <h2>Live ({live.length})</h2>
-        {live.map((q) => (
-          <div key={q.id} className="card">
+      <section aria-label="Live" className="queue live-grid">
+        <h2 style={{ gridColumn: "1 / -1" }}>Live ({live.length})</h2>
+        {live.map((q, i) => (
+          <div key={q.id} className={q.status === "featured" ? "card glass-card enter featured" : "card glass-card enter"} style={{ "--d": `${Math.min(i, 8) * 60}ms` } as CSSProperties}>
             <div className="card-top">
               {q.status === "featured" && <span className="badge">Featured</span>}
               <span className="handle">{q.display_handle}</span>

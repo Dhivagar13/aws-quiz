@@ -45,7 +45,7 @@ export default function QuestionForm({ onSubmit }: Props) {
   }
 
   return (
-    <form className="panel" onSubmit={handleSubmit} aria-label="Ask anonymously">
+    <form className="panel glass" onSubmit={handleSubmit} aria-label="Ask anonymously">
       <div className="field">
         <label htmlFor="q-body">Your question</label>
         <textarea
@@ -74,7 +74,7 @@ export default function QuestionForm({ onSubmit }: Props) {
         </div>
       )}
 
-      <button className="btn" type="submit" disabled={busy || body.trim().length < 2}>
+      <button className="btn btn-cta" type="submit" disabled={busy || body.trim().length < 2}>
         {busy ? "Posting..." : "Post anonymously"}
       </button>
     </form>

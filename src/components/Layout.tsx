@@ -4,7 +4,7 @@ import mecLogo from "../assets/mec-logo.jpg";
 export default function Layout() {
   return (
     <>
-      <header className="topbar">
+      <header className="topbar glass">
         <div className="topbar-inner">
           <a className="brand" href="/" aria-label="SBG MEC Q and A home">
             <img src={mecLogo} alt="Mailam Engineering College banner" />

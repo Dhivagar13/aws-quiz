@@ -24,7 +24,7 @@ export default function Ask() {
           </div>
         )}
       </div>
-      <div className="panel" aria-label="How it works">
+      <div className="panel glass" aria-label="How it works">
         <h2>How it works</h2>
         <p className="lede">Post → pending → admin approves → wall shows featured first, then votes.</p>
         <div className="toolbar">

@@ -29,8 +29,11 @@ export default function Wall() {
         <span className="wall-live" aria-live="polite">
           ● LIVE {rows.length}
         </span>
-        <span className="meta">{lastSync ? `synced ${new Date(lastSync).toLocaleTimeString()}` : ""}</span>
-        <span className="toolbar" style={{ marginLeft: "auto" }}>
+      </div>
+
+      <div className="wall-toolbar" role="toolbar" aria-label="Wall controls">
+        <span className="meta">{lastSync ? `synced ${new Date(lastSync).toLocaleTimeString()}` : "waiting for sync"}</span>
+        <span style={{ marginLeft: "auto", display: "inline-flex", gap: 8 }}>
           <button className="btn ghost small" type="button" onClick={() => void refresh()}>
             Refresh now
           </button>
@@ -59,16 +62,16 @@ export default function Wall() {
       )}
 
       {featured.length > 0 && (
-        <section className="wall-featured grid" aria-label="Featured">
-          {featured.map((q) => (
-            <QuestionCard key={q.id} q={q} voted={voted.has(q.id)} onUpvote={(id) => void handleUpvote(id)} />
+        <section className="wall-featured" aria-label="Featured">
+          {featured.map((q, i) => (
+            <QuestionCard key={q.id} q={q} voted={voted.has(q.id)} onUpvote={(id) => void handleUpvote(id)} index={i} />
           ))}
         </section>
       )}
 
       <section className="wall-grid" aria-label="Approved" style={{ marginTop: 16 }}>
-        {rest.map((q) => (
-          <QuestionCard key={q.id} q={q} voted={voted.has(q.id)} onUpvote={(id) => void handleUpvote(id)} />
+        {rest.map((q, i) => (
+          <QuestionCard key={q.id} q={q} voted={voted.has(q.id)} onUpvote={(id) => void handleUpvote(id)} index={i + featured.length} />
         ))}
       </section>
     </div>

@@ -12,9 +12,20 @@
     --phosphor-dim: #1d9e53;
     --amber: #ffb020;
     --danger: #ff6b6b;
+    /* dhivagar-slice1: brand accents */
+    --mec-navy: #1b2a6b;
+    --gold: #c9a227;
+    --aws-orange: #ff9900;
+    --teal: #2dd4bf;
+    /* dhivagar-slice1: glass token foundation */
+    --glass-bg: rgba(16, 24, 30, 0.58);
+    --glass-border: rgba(255, 255, 255, 0.18);
+    --glass-blur: 16px;
+    --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.36);
     --radius: 14px;
     --radius-sm: 10px;
-    --font: "Segoe UI", system-ui, -apple-system, Roboto, "Helvetica Neue", Arial, sans-serif;
+    --font: "Segoe UI", system-ui, -apple-system, "Helvetica Neue", sans-serif;
+    --display: "Avenir Next", "Segoe UI Semibold", "Noto Sans Display", system-ui, sans-serif;
     --mono: ui-monospace, "Cascadia Mono", "SF Mono", Consolas, monospace;
     --touch: 44px;
     --wall-min: 24px;
@@ -31,15 +42,26 @@
   body {
     margin: 0;
     padding: 0;
+    overflow-x: clip;
   }
 
   body {
-    background: var(--bg);
+    background-color: var(--bg);
+    /* dhivagar-slice1: gradient mesh substrate for glass blur */
+    background-image:
+      radial-gradient(52rem 30rem at 12% -6%, rgba(27, 42, 107, 0.52), transparent 62%),
+      radial-gradient(42rem 26rem at 92% 8%, rgba(45, 212, 191, 0.16), transparent 60%),
+      radial-gradient(36rem 24rem at 50% 108%, rgba(201, 162, 39, 0.14), transparent 62%);
+    background-attachment: fixed;
     color: var(--ink);
     font-family: var(--font);
     line-height: 1.5;
     min-height: 100vh;
     -webkit-font-smoothing: antialiased;
+  }
+
+  img {
+    max-width: 100%;
   }
 
   a {
@@ -65,6 +87,85 @@
 }
 
 @layer components {
+  /* dhivagar-slice1: glass utility */
+  .glass {
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    backdrop-filter: blur(var(--glass-blur)) saturate(140%);
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(140%);
+    box-shadow: var(--glass-shadow);
+  }
+
+  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    .glass {
+      background: rgba(18, 25, 21, 0.94);
+    }
+  }
+
+  /* dhivagar-slice2: glass-card variant floats above mesh */
+  .glass-card {
+    background:
+      linear-gradient(135deg, rgba(255, 255, 255, 0.09), rgba(255, 255, 255, 0.02) 42%),
+      var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    backdrop-filter: blur(var(--glass-blur)) saturate(140%);
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(140%);
+    box-shadow: var(--glass-shadow), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  }
+
+  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    .glass-card {
+      background: rgba(18, 25, 21, 0.94);
+    }
+  }
+
+  /* dhivagar-slice2: tilt stage + staggered entry + hover lift */
+  .tilt-wrap {
+    perspective: 900px;
+  }
+
+  .tilt {
+    transform-style: preserve-3d;
+    transition: transform 180ms ease-out, box-shadow 180ms ease-out, border-color 180ms ease-out;
+    will-change: transform;
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    .tilt:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 16px 44px rgba(0, 0, 0, 0.44), inset 0 1px 0 rgba(255, 255, 255, 0.14);
+    }
+  }
+
+  @keyframes dhivagar-rise-in {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .enter {
+    animation: dhivagar-rise-in 420ms ease-out both;
+    animation-delay: var(--d, 0ms);
+  }
+
+  /* dhivagar-slice2: thumb-reachable Ask CTA, min 48px */
+  .btn-cta {
+    min-height: 48px;
+    width: 100%;
+    font-size: clamp(16px, 2.5vw + 0.6rem, 18px);
+  }
+
+  @media (min-width: 641px) {
+    .btn-cta {
+      width: auto;
+    }
+  }
+
   .shell {
     width: 100%;
     max-width: var(--max);
@@ -73,8 +174,11 @@
   }
 
   .topbar {
-    border-bottom: 1px solid var(--line);
-    background: rgba(10, 15, 13, 0.92);
+    border-bottom: 1px solid var(--glass-border);
+    background: var(--glass-bg);
+    backdrop-filter: blur(var(--glass-blur)) saturate(140%);
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(140%);
+    box-shadow: var(--glass-shadow);
     position: sticky;
     top: 0;
     z-index: 10;
@@ -114,6 +218,7 @@
 
   .brand-lockup strong {
     display: block;
+    font-family: var(--display);
     font-size: 15px;
     letter-spacing: 0.04em;
   }
@@ -167,6 +272,16 @@
     padding: 20px;
   }
 
+  /* dhivagar-fix: .panel.glass must come after .panel so glass wins at
+     equal-or-higher specificity (0,2,0 later beats 0,1,0 earlier). */
+  .panel.glass {
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    backdrop-filter: blur(var(--glass-blur)) saturate(140%);
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(140%);
+    box-shadow: var(--glass-shadow);
+  }
+
   .grid {
     display: grid;
     gap: 16px;
@@ -187,14 +302,18 @@
   }
 
   h1 {
-    font-size: clamp(28px, 4vw, 44px);
+    font-family: var(--display);
+    font-size: clamp(26px, 6vw + 0.5rem, 44px);
     line-height: 1.05;
     margin: 0 0 12px;
+    letter-spacing: -0.01em;
   }
 
   h2 {
-    font-size: 20px;
+    font-family: var(--display);
+    font-size: clamp(18px, 2.5vw + 0.75rem, 22px);
     margin: 0 0 12px;
+    line-height: 1.2;
   }
 
   .lede {
@@ -312,10 +431,33 @@
     padding: 18px;
     display: grid;
     gap: 10px;
+    max-width: 100%;
+    overflow-wrap: anywhere;
   }
 
+  /* dhivagar-fix: .card.glass-card must come after .card so glass wins
+     (0,2,0 later beats 0,1,0 earlier). Kept before .card.featured so the
+     featured gold-tinted glass still wins when both classes are present. */
+  .card.glass-card {
+    background:
+      linear-gradient(135deg, rgba(255, 255, 255, 0.09), rgba(255, 255, 255, 0.02) 42%),
+      var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    backdrop-filter: blur(var(--glass-blur)) saturate(140%);
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(140%);
+    box-shadow: var(--glass-shadow), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  }
+
+  /* dhivagar-slice2: featured larger glass style, projector legible */
   .card.featured {
-    border-color: var(--amber);
+    border-color: rgba(201, 162, 39, 0.65);
+    background:
+      linear-gradient(135deg, rgba(201, 162, 39, 0.16), rgba(255, 153, 0, 0.06) 55%, rgba(255, 255, 255, 0.03)),
+      var(--glass-bg);
+    backdrop-filter: blur(var(--glass-blur)) saturate(150%);
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(150%);
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.42), 0 0 0 1px rgba(201, 162, 39, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.14);
+    padding: clamp(20px, 3vw + 12px, 28px);
   }
 
   .card-top {
@@ -335,7 +477,7 @@
   }
 
   .card-body {
-    font-size: 18px;
+    font-size: clamp(17px, 1.6vw + 0.7rem, 19px);
     line-height: 1.45;
     overflow-wrap: anywhere;
   }
@@ -377,6 +519,17 @@
     align-items: center;
   }
 
+  /* dhivagar-slice2: focus-visible everywhere interactive */
+  .btn:focus-visible,
+  .vote:focus-visible,
+  .nav a:focus-visible,
+  .brand:focus-visible,
+  textarea:focus-visible,
+  input:focus-visible {
+    outline: 3px solid var(--amber);
+    outline-offset: 2px;
+  }
+
   .footer {
     margin-top: auto;
     border-top: 1px solid var(--line);
@@ -403,6 +556,26 @@
     margin: 8px 0 16px;
   }
 
+  /* dhivagar-slice2: sticky Wall toolbar stays reachable while scrolling */
+  .wall-toolbar {
+    position: sticky;
+    top: 64px;
+    z-index: 5;
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    backdrop-filter: blur(var(--glass-blur)) saturate(140%);
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(140%);
+    box-shadow: var(--glass-shadow);
+    border-radius: 999px;
+    padding: 8px 8px 8px 14px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin: 0 0 16px;
+    max-width: 100%;
+  }
+
   .wall-live {
     font-family: var(--mono);
     color: var(--phosphor);
@@ -412,14 +585,23 @@
     font-size: 14px;
   }
 
+  /* dhivagar-slice2: 1 col mobile, 2 col tablet, 3 col projector */
   .wall-grid {
     display: grid;
     gap: 16px;
+    grid-template-columns: 1fr;
+    perspective: 900px;
   }
 
-  @media (min-width: 900px) {
+  @media (min-width: 700px) {
     .wall-grid {
       grid-template-columns: 1fr 1fr;
+    }
+  }
+
+  @media (min-width: 1280px) {
+    .wall-grid {
+      grid-template-columns: 1fr 1fr 1fr;
     }
   }
 
@@ -428,8 +610,31 @@
     line-height: 1.35;
   }
 
+  /* dhivagar-slice2: featured wall section + projector type */
+  .wall-featured {
+    display: grid;
+    gap: 16px;
+    grid-template-columns: 1fr;
+    margin-bottom: 4px;
+    perspective: 900px;
+  }
+
+  @media (min-width: 1280px) {
+    .wall-featured {
+      grid-template-columns: 1fr 1fr;
+    }
+  }
+
+  @media (max-width: 640px) {
+    .wall-toolbar {
+      top: 118px;
+      border-radius: 16px;
+    }
+  }
+
   .wall-featured .card-body {
     font-size: clamp(28px, 3.4vw, 40px);
+    line-height: 1.25;
   }
 }
 
@@ -437,12 +642,42 @@
   .queue {
     display: grid;
     gap: 12px;
+    perspective: 900px;
+  }
+
+  /* dhivagar-slice2: Admin queue glass rows, tablet usable */
+  .queue .card {
+    background:
+      linear-gradient(135deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.02) 45%),
+      var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    backdrop-filter: blur(var(--glass-blur)) saturate(140%);
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(140%);
+    box-shadow: var(--glass-shadow), inset 0 1px 0 rgba(255, 255, 255, 0.1);
   }
 
   .admin-bar {
     display: flex;
     gap: 8px;
     flex-wrap: wrap;
+  }
+
+  .admin-bar .btn {
+    flex: 1 1 auto;
+  }
+
+  @media (min-width: 700px) {
+    .queue.live-grid {
+      grid-template-columns: 1fr 1fr;
+    }
+
+    .admin-bar {
+      flex-wrap: nowrap;
+    }
+
+    .admin-bar .btn {
+      flex: 0 1 auto;
+    }
   }
 }
 
@@ -453,5 +688,142 @@
     height: 1px;
     overflow: hidden;
     clip: rect(0, 0, 0, 0);
+  }
+
+  /* dhivagar-slice2: responsive base - mobile-first, no horizontal scroll */
+  .shell,
+  .topbar-inner,
+  .footer-inner {
+    box-sizing: border-box;
+  }
+
+  .shell {
+    padding-bottom: calc(48px + env(safe-area-inset-bottom, 0px));
+    padding-left: calc(20px + env(safe-area-inset-left, 0px));
+    padding-right: calc(20px + env(safe-area-inset-right, 0px));
+  }
+
+  img,
+  .card,
+  .panel,
+  .wall-toolbar,
+  .toolbar {
+    max-width: 100%;
+  }
+
+  @media (max-width: 768px) {
+    .shell {
+      padding: 14px 16px 40px;
+    }
+
+    .topbar-inner {
+      padding: 10px 16px;
+      gap: 12px;
+    }
+
+    .panel,
+    .card {
+      padding: 16px;
+    }
+  }
+
+  /* Single column + one-handed Ask under 640px */
+  @media (max-width: 640px) {
+    .grid,
+    .grid.two {
+      grid-template-columns: 1fr;
+    }
+
+    .topbar-inner {
+      flex-wrap: wrap;
+    }
+
+    .brand {
+      flex: 1 1 auto;
+      min-width: 0;
+    }
+
+    .aws-lockup {
+      margin-left: auto;
+    }
+
+    .nav {
+      width: 100%;
+      margin-left: 0;
+    }
+
+    .nav a {
+      flex: 1 1 0;
+      padding: 0 12px;
+    }
+
+    .toolbar .btn,
+    .toolbar a.btn {
+      flex: 1 1 100%;
+    }
+
+    textarea {
+      min-height: 120px;
+    }
+  }
+
+  /* Tight 360px guard: no horizontal scroll */
+  @media (max-width: 360px) {
+    .shell {
+      padding-left: 12px;
+      padding-right: 12px;
+    }
+
+    .topbar-inner {
+      padding: 8px 12px;
+      gap: 8px;
+    }
+
+    .brand img {
+      height: 34px;
+      max-width: 160px;
+    }
+
+    .brand-lockup strong {
+      font-size: 13px;
+    }
+
+    .brand-lockup span {
+      font-size: 11px;
+    }
+
+    .aws-lockup {
+      font-size: 11px;
+      padding: 5px 8px;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+
+    /* dhivagar-slice2: tilt off under reduced motion */
+    .tilt,
+    .tilt:hover {
+      transform: none !important;
+    }
+
+    .enter {
+      animation: none !important;
+    }
+  }
+
+  /* dhivagar-slice2: tilt off on touch, no hover lift to avoid sticky states */
+  @media (hover: none), (pointer: coarse) {
+    .tilt,
+    .tilt:hover {
+      transform: none !important;
+    }
   }
 }
