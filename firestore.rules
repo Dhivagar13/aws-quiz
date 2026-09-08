@@ -1,0 +1,86 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isClaimAdmin() {
+      return isSignedIn() && request.auth.token.is_admin == true;
+    }
+
+    function isDocAdmin() {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+
+    function isAdmin() {
+      return isClaimAdmin() || isDocAdmin();
+    }
+
+    function isLiveQuestion(data) {
+      return data.status == 'approved' || data.status == 'featured';
+    }
+
+    function validNewQuestion(data) {
+      return data.status == 'pending'
+        && data.body is string
+        && data.body.size() >= 2 && data.body.size() <= 280
+        && data.display_handle is string
+        && data.display_handle.matches('^anon-[A-Z0-9]{4}$')
+        && data.upvote_count is int && data.upvote_count == 0
+        && data.created_at is timestamp
+        && data.keys().hasOnly(['body', 'display_handle', 'status', 'upvote_count', 'created_at']);
+    }
+
+    // questions/{qid}: anonymous Q&A core.
+    // - create: anyone may post pending-only with validation.
+    // - get/list: anyone may read approved/featured only; admins read all.
+    //   Per-doc list guard means anonymous queries must filter to live
+    //   statuses, otherwise the whole query is rejected.
+    // - update: admins full write; anonymous may bump upvote_count by exactly +1 on live docs.
+    // - delete: admins only.
+    match /questions/{qid} {
+      allow get: if isLiveQuestion(resource.data) || isAdmin();
+      allow list: if isAdmin() || isLiveQuestion(resource.data);
+
+      allow create: if validNewQuestion(request.resource.data);
+
+      allow update: if isAdmin()
+        || (
+          isLiveQuestion(resource.data)
+          && request.resource.data.status == resource.data.status
+          && request.resource.data.body == resource.data.body
+          && request.resource.data.display_handle == resource.data.display_handle
+          && request.resource.data.created_at == resource.data.created_at
+          && request.resource.data.upvote_count == resource.data.upvote_count + 1
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['upvote_count'])
+        );
+
+      allow delete: if isAdmin();
+
+      // votes subcollection: dedup only, no public read.
+      // - create: anyone may write one vote per device on live parents, doc-ID = voterHash.
+      // - read/update/delete: admins only.
+      match /votes/{voterHash} {
+        allow get, list: if isAdmin();
+        allow create: if exists(/databases/$(database)/documents/questions/$(qid))
+          && isLiveQuestion(get(/databases/$(database)/documents/questions/$(qid)).data)
+          && !exists(/databases/$(database)/documents/questions/$(qid)/votes/$(voterHash))
+          && voterHash.size() >= 8 && voterHash.size() <= 128
+          && request.resource.data.keys().hasOnly(['created_at'])
+          && request.resource.data.created_at is timestamp;
+        allow update, delete: if isAdmin();
+      }
+    }
+
+    // admins/{uid}: fallback allowlist. Self-read lets a new moderator check
+    // their own grant; all other access is admin-only. Bootstrap the first
+    // admin via console + custom claim (see .env.example).
+    match /admins/{uid} {
+      allow get: if isClaimAdmin() || (isSignedIn() && request.auth.uid == uid) || isDocAdmin();
+      allow list, create, update, delete: if isAdmin();
+    }
+  }
+}
