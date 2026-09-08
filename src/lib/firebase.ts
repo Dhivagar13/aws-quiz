@@ -46,7 +46,11 @@ if (isFirebaseConfigured) {
       messagingSenderId: messagingSenderId || undefined,
       appId,
     });
-  const forceLongPoll = import.meta.env.VITE_FIRESTORE_LONG_POLL === "force";
+  const rawLongPoll = String(import.meta.env.VITE_FIRESTORE_LONG_POLL ?? "").toLowerCase().trim();
+  const forceLongPoll = ["force", "true", "1"].includes(rawLongPoll);
+  if (import.meta.env.DEV && forceLongPoll) {
+    console.debug("[firestore] long-polling enabled via VITE_FIRESTORE_LONG_POLL");
+  }
   try {
     dbInstance = forceLongPoll
       ? initializeFirestore(app, { experimentalForceLongPolling: true })
