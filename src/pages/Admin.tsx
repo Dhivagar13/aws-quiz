@@ -18,7 +18,8 @@ export default function Admin() {
 
   useEffect(() => {
     if (!isFirebaseConfigured || !auth || !db) {
-      setIsAdmin(true); // demo mode: allow moderation of local data with banner
+      setIsAdmin(false);
+      setUserEmail(null);
       setAuthChecking(false);
       return;
     }
@@ -94,6 +95,23 @@ export default function Admin() {
     );
   }
 
+  if (!isFirebaseConfigured) {
+    return (
+      <div className="grid">
+        <div className="panel">
+          <p className="eyebrow">Hidden · /admin</p>
+          <h1>Live setup required</h1>
+          <p className="lede">
+            Firebase env is missing. Add <code>VITE_FIREBASE_API_KEY</code>,{" "}
+            <code>VITE_FIREBASE_AUTH_DOMAIN</code>, <code>VITE_FIREBASE_PROJECT_ID</code>, and{" "}
+            <code>VITE_FIREBASE_APP_ID</code> to <code>.env</code> and restart. Zero questions shown
+            until configured.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   if (!isAdmin) {
     return (
       <div className="grid">
@@ -137,9 +155,6 @@ export default function Admin() {
         {loading && <div className="notice">Loading queue...</div>}
         {error && <div className="notice amber" role="alert">{error}</div>}
         {actionError && <p className="error" role="alert">{actionError}</p>}
-        {!isFirebaseConfigured && (
-          <div className="notice amber">Demo mode: moderating browser-local data only.</div>
-        )}
       </div>
 
       <section aria-label="Pending queue" className="queue">

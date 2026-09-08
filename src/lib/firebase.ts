@@ -20,7 +20,8 @@ function looksPlaceholder(value: string): boolean {
   );
 }
 
-// Demo mode when any required key is missing or still a placeholder.
+// Live-only: when any required key is missing or still a placeholder the app
+// shows a config-required error with zero rows. No local sample rows.
 // Required for live mode: apiKey + authDomain + projectId + appId.
 // storageBucket / messagingSenderId are optional for Firestore-only MVP.
 export const isFirebaseConfigured =

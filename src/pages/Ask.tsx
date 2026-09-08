@@ -16,9 +16,11 @@ export default function Ask() {
         </p>
         <QuestionForm onSubmit={submit} />
         {!isFirebaseConfigured && (
-          <div className="notice amber" role="status">
-            Demo mode: Firebase env is missing. Posts are stored in this browser only. Add{" "}
-            <code>VITE_FIREBASE_API_KEY</code> + <code>VITE_FIREBASE_PROJECT_ID</code> to go live.
+          <div className="notice amber" role="alert">
+            Live setup required: Firebase env is missing. Add <code>VITE_FIREBASE_API_KEY</code>,{" "}
+            <code>VITE_FIREBASE_AUTH_DOMAIN</code>, <code>VITE_FIREBASE_PROJECT_ID</code>, and{" "}
+            <code>VITE_FIREBASE_APP_ID</code> to <code>.env</code> and restart. Zero questions shown
+            until configured.
           </div>
         )}
       </div>

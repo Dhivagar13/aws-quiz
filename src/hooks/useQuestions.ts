@@ -39,55 +39,8 @@ export interface Question {
 
 type Scope = "wall" | "admin";
 
-const DEMO_KEY = "sbg-demo-questions";
-const DEMO_SEED: Question[] = [
-  {
-    id: "demo-1",
-    body: "How does SBG use Graviton to cut cost for spiky quiz traffic?",
-    display_handle: "anon-7KQ2",
-    status: "featured",
-    upvote_count: 24,
-    created_at: new Date(Date.now() - 1000 * 60 * 42).toISOString(),
-  },
-  {
-    id: "demo-2",
-    body: "What is the simplest Firestore rules pattern for anonymous posting?",
-    display_handle: "anon-3MD9",
-    status: "approved",
-    upvote_count: 17,
-    created_at: new Date(Date.now() - 1000 * 60 * 31).toISOString(),
-  },
-  {
-    id: "demo-3",
-    body: "When should polling replace websockets on college WiFi?",
-    display_handle: "anon-Q8ZT",
-    status: "approved",
-    upvote_count: 9,
-    created_at: new Date(Date.now() - 1000 * 60 * 12).toISOString(),
-  },
-];
-
-function readDemo(): Question[] {
-  try {
-    const raw = localStorage.getItem(DEMO_KEY);
-    if (!raw) {
-      localStorage.setItem(DEMO_KEY, JSON.stringify(DEMO_SEED));
-      return DEMO_SEED;
-    }
-    const arr = JSON.parse(raw) as Question[];
-    return Array.isArray(arr) ? arr : DEMO_SEED;
-  } catch {
-    return DEMO_SEED;
-  }
-}
-
-function writeDemo(rows: Question[]): void {
-  try {
-    localStorage.setItem(DEMO_KEY, JSON.stringify(rows));
-  } catch {
-    // ignore
-  }
-}
+export const LIVE_CONFIG_ERROR =
+  "Live setup required: Firebase env is missing. Add VITE_FIREBASE_* keys to .env and restart. Zero questions shown until configured.";
 
 function toQuestion(id: string, data: DocumentData): Question {
   const rawCreated = data.created_at;
@@ -132,14 +85,10 @@ export function useQuestions(scope: Scope) {
 
   const fetchRows = useCallback(async () => {
     if (!isFirebaseConfigured || !db) {
-      const all = readDemo();
-      setRows(
-        scope === "wall"
-          ? sortWall(all.filter((q) => q.status === "approved" || q.status === "featured"))
-          : [...all].sort((a, b) => b.created_at.localeCompare(a.created_at)),
-      );
+      setRows([]);
       setLoading(false);
-      setLastSync(new Date().toISOString());
+      setError(LIVE_CONFIG_ERROR);
+      setLastSync(null);
       return;
     }
     try {
@@ -169,8 +118,8 @@ export function useQuestions(scope: Scope) {
     setLoading(true);
     void fetchRows();
 
-    // Polling fallback is mandatory: college WiFi may block websockets even
-    // with Firestore long-polling enabled.
+    // Polling is live resilience: college WiFi may block websockets even
+    // with Firestore long-polling enabled. onSnapshot + 5s poll stay on.
     const timer = window.setInterval(() => {
       void fetchRows();
     }, POLL_INTERVAL_MS);
@@ -213,20 +162,7 @@ export function useQuestions(scope: Scope) {
       const body = maskPII(rawBody);
       const display_handle = generateHandle();
 
-      if (!isFirebaseConfigured || !db) {
-        const all = readDemo();
-        const row: Question = {
-          id: `demo-${Date.now()}`,
-          body,
-          display_handle,
-          status: "pending",
-          upvote_count: 0,
-          created_at: new Date().toISOString(),
-        };
-        writeDemo([row, ...all]);
-        await fetchRows();
-        return display_handle;
-      }
+      if (!isFirebaseConfigured || !db) throw new Error(LIVE_CONFIG_ERROR);
 
       // Anonymous create is pending-only. Rules reject any other status,
       // out-of-range body, bad handle, or non-zero upvote_count.
@@ -247,14 +183,7 @@ export function useQuestions(scope: Scope) {
     async (id: string): Promise<void> => {
       if (getVotedIds().has(id)) throw new Error("You already upvoted this question on this device.");
 
-      if (!isFirebaseConfigured || !db) {
-        const all = readDemo().map((q) => (q.id === id ? { ...q, upvote_count: q.upvote_count + 1 } : q));
-        writeDemo(all);
-        markVoted(id);
-        setVoted(getVotedIds());
-        await fetchRows();
-        return;
-      }
+      if (!isFirebaseConfigured || !db) throw new Error(LIVE_CONFIG_ERROR);
 
       const firestore = db;
       const voterHash = getOrCreateVoterHash();
@@ -300,11 +229,7 @@ export function useQuestions(scope: Scope) {
 
   const setStatus = useCallback(
     async (id: string, status: QuestionStatus): Promise<void> => {
-      if (!isFirebaseConfigured || !db) {
-        writeDemo(readDemo().map((q) => (q.id === id ? { ...q, status } : q)));
-        await fetchRows();
-        return;
-      }
+      if (!isFirebaseConfigured || !db) throw new Error(LIVE_CONFIG_ERROR);
       // Admin-only. Rules reject non-admin writes.
       await updateDoc(doc(db, "questions", id), { status });
       await fetchRows();

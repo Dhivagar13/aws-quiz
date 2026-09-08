@@ -41,14 +41,14 @@ Rules at a glance:
 | Status changes | Admin only, enforced by Firestore rules |
 | Answers | None stored or shown in this version |
 
-## Demo vs live mode
+## Live mode only
 
-| Mode | When | Data | Auth |
+| State | When | Data | Auth |
 |------|------|------|------|
-| Demo | Firebase env missing or placeholder | Browser localStorage only, 3 seed questions | Open moderation, banner shown |
 | Live | All required `VITE_FIREBASE_*` keys set | Firestore `questions` collection | Firebase Auth plus admin allowlist |
+| Not configured | Firebase env missing or placeholder | Zero rows, config-required error | `/admin` shows setup panel, no local moderation |
 
-Demo mode shows this banner: `Demo mode: Firebase env is missing.` That is safe for rehearsal. Do not use demo for a real hall because each laptop sees only its own posts.
+Missing env shows: `Live setup required: Firebase env is missing.` No seed rows, no browser-only posts. Fill `.env` and restart to go live.
 
 ## Host quickstart, 10 minutes
 
@@ -110,7 +110,7 @@ Never commit `.env`. It is already ignored.
 | `VITE_FIREBASE_MESSAGING_SENDER_ID` | No | Optional for this Firestore only build |
 | `VITE_POLL_INTERVAL_MS` | No | Default 5000, minimum 2000 |
 
-Live mode needs API key plus auth domain plus project ID plus app ID. If any one is missing or still contains words like `placeholder` or `example`, the app falls back to demo mode [verified in `src/lib/firebase.ts`].
+Live mode needs API key plus auth domain plus project ID plus app ID. If any one is missing or still contains words like `placeholder` or `example`, the app shows the live-required error with zero rows [verified in `src/lib/firebase.ts` and `src/hooks/useQuestions.ts`].
 
 ### 3. Firebase
 
@@ -209,7 +209,7 @@ Do not add new logos without checking trademark and source. Keep the quarantine 
 
 | Symptom | Fix |
 |---------|-----|
-| `Demo mode` banner on projector | `.env` missing or still placeholder. Fill 4 required keys, restart `npm run dev`. |
+| `Live setup required` banner on projector | `.env` missing or still placeholder. Fill 4 required keys, restart `npm run dev`. |
 | Wall empty but Ask posts succeed | Posts are pending. Approve one in `/admin`. Wall shows approved and featured only. |
 | `Missing or insufficient permissions` | Redeploy `firestore.rules`. Check wall filter is live statuses only. |
 | `The query requires an index` | Deploy `firestore.indexes.json` or click console link to create index, wait a few minutes. |
