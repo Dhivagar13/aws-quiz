@@ -1,6 +1,9 @@
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import type { CSSProperties, MouseEvent } from "react";
+import confetti from "canvas-confetti";
+import { ThumbsUp, Sparkles, Copy, Check, Clock, UserCheck } from "lucide-react";
 import type { Question } from "../hooks/useQuestions";
+import { timeAgo } from "../lib/format";
 
 interface Props {
   q: Question;
@@ -10,18 +13,37 @@ interface Props {
   index?: number;
 }
 
-export function timeAgo(iso: string): string {
-  const ms = Date.now() - new Date(iso).getTime();
-  const m = Math.max(0, Math.floor(ms / 60000));
-  if (m < 1) return "just now";
-  if (m < 60) return `${m}m ago`;
-  const h = Math.floor(m / 60);
-  if (h < 24) return `${h}h ago`;
-  return new Date(iso).toLocaleString();
+// Automatically detect prominent cloud topics from question text
+function detectTopic(text: string): string | null {
+  const lower = text.toLowerCase();
+  if (lower.includes("cert") || lower.includes("exam") || lower.includes("clf") || lower.includes("saa")) {
+    return "Certification";
+  }
+  if (lower.includes("cost") || lower.includes("free tier") || lower.includes("bill") || lower.includes("price")) {
+    return "Cost & Billing";
+  }
+  if (lower.includes("lambda") || lower.includes("serverless") || lower.includes("dynamo")) {
+    return "Serverless";
+  }
+  if (lower.includes("ec2") || lower.includes("s3") || lower.includes("vpc") || lower.includes("rds")) {
+    return "Core Cloud";
+  }
+  if (lower.includes("ai") || lower.includes("bedrock") || lower.includes("llm") || lower.includes("genai") || lower.includes("ml")) {
+    return "Generative AI";
+  }
+  if (lower.includes("job") || lower.includes("career") || lower.includes("intern") || lower.includes("salary") || lower.includes("placement")) {
+    return "Careers & Placement";
+  }
+  if (lower.includes("security") || lower.includes("iam") || lower.includes("auth") || lower.includes("safe")) {
+    return "Security & IAM";
+  }
+  return null;
 }
 
 export default function QuestionCard({ q, voted, onUpvote, compact, index = 0 }: Props) {
   const ref = useRef<HTMLElement | null>(null);
+  const [copied, setCopied] = useState(false);
+  const [isBumping, setIsBumping] = useState(false);
 
   function canTilt(): boolean {
     if (typeof window === "undefined" || typeof window.matchMedia !== "function") return false;
@@ -36,7 +58,7 @@ export default function QuestionCard({ q, voted, onUpvote, compact, index = 0 }:
     const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
     const px = (e.clientX - r.left) / Math.max(1, r.width) - 0.5;
     const py = (e.clientY - r.top) / Math.max(1, r.height) - 0.5;
-    el.style.transform = `translateY(-4px) rotateX(${(-py * 6).toFixed(2)}deg) rotateY(${(px * 6).toFixed(2)}deg)`;
+    el.style.transform = `translateY(-4px) rotateX(${(-py * 5).toFixed(2)}deg) rotateY(${(px * 5).toFixed(2)}deg)`;
   }
 
   function handleLeave(): void {
@@ -44,8 +66,58 @@ export default function QuestionCard({ q, voted, onUpvote, compact, index = 0 }:
     if (el) el.style.transform = "";
   }
 
-  const stagger = Math.min(Math.max(0, index), 8) * 60;
-  const cls = q.status === "featured" ? "card glass-card tilt enter featured" : "card glass-card tilt enter";
+  async function handleCopy(e: MouseEvent) {
+    e.stopPropagation();
+    try {
+      await navigator.clipboard.writeText(`"${q.body}" — ${q.display_handle} (AWS MEC Q&A)`);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Fallback
+    }
+  }
+
+  function handleVoteClick(e: MouseEvent<HTMLButtonElement>) {
+    if (voted) return;
+
+    // Gentle tactile haptic feedback for mobile
+    if (typeof navigator !== "undefined" && "vibrate" in navigator) {
+      try {
+        navigator.vibrate?.([15]);
+      } catch {
+        // ignore
+      }
+    }
+
+    // Micro particle celebration from vote button
+    const btnRect = e.currentTarget.getBoundingClientRect();
+    const x = (btnRect.left + btnRect.width / 2) / window.innerWidth;
+    const y = (btnRect.top + btnRect.height / 2) / window.innerHeight;
+
+    try {
+      void confetti({
+        particleCount: 18,
+        spread: 45,
+        startVelocity: 16,
+        origin: { x, y },
+        colors: ["#3dff88", "#ff9900", "#ffffff", "#2dd4bf"],
+        disableForReducedMotion: true,
+      });
+    } catch {
+      // ignore
+    }
+
+    setIsBumping(true);
+    setTimeout(() => setIsBumping(false), 400);
+    onUpvote(q.id);
+  }
+
+  const topic = detectTopic(q.body);
+  const stagger = Math.min(Math.max(0, index), 8) * 50;
+  const isFeatured = q.status === "featured";
+  const cls = isFeatured
+    ? `card glass-card tilt enter featured ${compact ? "compact" : ""}`
+    : `card glass-card tilt enter ${compact ? "compact" : ""}`;
 
   return (
     <article
@@ -57,24 +129,57 @@ export default function QuestionCard({ q, voted, onUpvote, compact, index = 0 }:
       onMouseLeave={handleLeave}
     >
       <div className="card-top">
-        {q.status === "featured" && <span className="badge">Featured</span>}
-        <span className="handle">{q.display_handle}</span>
-        <span className="meta">{timeAgo(q.created_at)}</span>
-        {!compact && <span className="meta">{q.upvote_count} votes</span>}
+        <div className="card-top-badges">
+          {isFeatured && (
+            <span className="badge badge-featured">
+              <Sparkles size={13} className="badge-icon-spin" />
+              <span>Featured</span>
+            </span>
+          )}
+          {topic && <span className="badge badge-topic">{topic}</span>}
+        </div>
+
+        <div className="card-top-meta">
+          <span className="handle" title="Anonymous Attendee ID">
+            <UserCheck size={12} style={{ display: "inline", marginRight: 4, verticalAlign: "-1px" }} />
+            {q.display_handle}
+          </span>
+          <span className="meta" title={new Date(q.created_at).toLocaleString()}>
+            <Clock size={11} style={{ display: "inline", marginRight: 3, verticalAlign: "-1px" }} />
+            {timeAgo(q.created_at)}
+          </span>
+        </div>
       </div>
-      <div className="card-body">{q.body}</div>
+
+      <div className="card-body">
+        {q.body}
+      </div>
+
       <div className="card-foot">
         <button
           type="button"
-          className="vote"
+          className={`vote-btn ${voted ? "voted" : ""} ${isBumping ? "bump" : ""}`}
           aria-pressed={voted}
-          aria-label={voted ? "Upvoted" : `Upvote ${q.display_handle} question`}
-          onClick={() => onUpvote(q.id)}
+          aria-label={voted ? `Upvoted (${q.upvote_count})` : `Upvote ${q.display_handle}'s question`}
+          onClick={handleVoteClick}
         >
-          <span aria-hidden="true">{voted ? "▲" : "△"}</span>
-          <span>{q.upvote_count}</span>
-          <span>{voted ? "Voted" : "Upvote"}</span>
+          <ThumbsUp size={16} className={voted ? "fill-current" : ""} />
+          <span className="vote-counter">{q.upvote_count}</span>
+          <span className="vote-text">{voted ? "Upvoted" : "Upvote"}</span>
         </button>
+
+        <div className="card-actions">
+          <button
+            type="button"
+            className="icon-action-btn"
+            onClick={handleCopy}
+            title="Copy question text"
+            aria-label="Copy question"
+          >
+            {copied ? <Check size={14} className="text-phosphor" /> : <Copy size={14} />}
+            <span className="action-hint">{copied ? "Copied" : "Copy"}</span>
+          </button>
+        </div>
       </div>
     </article>
   );

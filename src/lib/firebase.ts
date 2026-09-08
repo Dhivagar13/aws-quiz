@@ -47,11 +47,10 @@ if (isFirebaseConfigured) {
       messagingSenderId: messagingSenderId || undefined,
       appId,
     });
-  // College WiFi often blocks websockets. Force long-polling so the wall
-  // still updates behind captive portals and aggressive proxies.
-  dbInstance = initializeFirestore(app, {
-    experimentalForceLongPolling: true,
-  });
+  const forceLongPoll = import.meta.env.VITE_FIRESTORE_LONG_POLL === "force";
+  dbInstance = forceLongPoll
+    ? initializeFirestore(app, { experimentalForceLongPolling: true })
+    : initializeFirestore(app, {});
   authInstance = getAuth(app);
 }
 

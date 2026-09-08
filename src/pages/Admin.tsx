@@ -1,26 +1,44 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import type { CSSProperties, FormEvent } from "react";
 import { getIdTokenResult, onAuthStateChanged, signInWithEmailAndPassword, signOut } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 import { auth, db, isFirebaseConfigured } from "../lib/firebase";
-import { useQuestions, type QuestionStatus } from "../hooks/useQuestions";
+import { useQuestions, type QuestionStatus, type Question } from "../hooks/useQuestions";
+import { timeAgo } from "../lib/format";
+import {
+  ShieldAlert,
+  CheckCircle,
+  Sparkles,
+  XCircle,
+  RefreshCw,
+  LogOut,
+  LogIn,
+  Search,
+  Lock,
+  Mail,
+  Clock,
+  ThumbsUp,
+  RotateCcw,
+} from "lucide-react";
+
+type AdminTab = "pending" | "live" | "rejected" | "all";
 
 export default function Admin() {
   const { rows, loading, error, refresh, setStatus } = useQuestions("admin");
   const [actionError, setActionError] = useState<string | null>(null);
+  const [actionSuccess, setActionSuccess] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
-  const [authChecking, setAuthChecking] = useState(true);
+  const [authChecking, setAuthChecking] = useState(() => Boolean(isFirebaseConfigured && auth && db));
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [authBusy, setAuthBusy] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<AdminTab>("pending");
+  const [search, setSearch] = useState("");
 
   useEffect(() => {
     if (!isFirebaseConfigured || !auth || !db) {
-      setIsAdmin(false);
-      setUserEmail(null);
-      setAuthChecking(false);
       return;
     }
     const unsub = onAuthStateChanged(auth, (user) => {
@@ -76,21 +94,44 @@ export default function Admin() {
 
   async function act(id: string, status: QuestionStatus): Promise<void> {
     setActionError(null);
+    setActionSuccess(null);
     try {
       await setStatus(id, status);
+      setActionSuccess(`Question updated to ${status}.`);
+      setTimeout(() => setActionSuccess(null), 2500);
     } catch (e) {
       setActionError(e instanceof Error ? e.message : "Moderation failed. Check rules / admin allowlist.");
     }
   }
 
-  const pending = rows.filter((q) => q.status === "pending");
-  const live = rows.filter((q) => q.status === "approved" || q.status === "featured");
-  const rejected = rows.filter((q) => q.status === "rejected");
+  const pending = useMemo(() => rows.filter((q) => q.status === "pending"), [rows]);
+  const live = useMemo(() => rows.filter((q) => q.status === "approved" || q.status === "featured"), [rows]);
+  const featured = useMemo(() => rows.filter((q) => q.status === "featured"), [rows]);
+  const rejected = useMemo(() => rows.filter((q) => q.status === "rejected"), [rows]);
+
+  const displayedQuestions = useMemo(() => {
+    let list: Question[] = [];
+    if (activeTab === "pending") list = pending;
+    else if (activeTab === "live") list = live;
+    else if (activeTab === "rejected") list = rejected;
+    else list = rows;
+
+    if (search.trim()) {
+      const q = search.toLowerCase().trim();
+      list = list.filter(
+        (item) => item.body.toLowerCase().includes(q) || item.display_handle.toLowerCase().includes(q)
+      );
+    }
+    return list;
+  }, [activeTab, pending, live, rejected, rows, search]);
 
   if (authChecking) {
     return (
       <div className="grid">
-        <div className="notice">Checking moderator session...</div>
+        <div className="panel glass enter" style={{ textAlign: "center", padding: "48px 24px" }}>
+          <RefreshCw size={24} className="spinner icon-amber" style={{ margin: "0 auto 12px" }} />
+          <p>Verifying moderator credentials...</p>
+        </div>
       </div>
     );
   }
@@ -98,14 +139,13 @@ export default function Admin() {
   if (!isFirebaseConfigured) {
     return (
       <div className="grid">
-        <div className="panel">
+        <div className="panel glass">
           <p className="eyebrow">Hidden · /admin</p>
-          <h1>Live setup required</h1>
+          <h1>Live Setup Required</h1>
           <p className="lede">
             Firebase env is missing. Add <code>VITE_FIREBASE_API_KEY</code>,{" "}
             <code>VITE_FIREBASE_AUTH_DOMAIN</code>, <code>VITE_FIREBASE_PROJECT_ID</code>, and{" "}
-            <code>VITE_FIREBASE_APP_ID</code> to <code>.env</code> and restart. Zero questions shown
-            until configured.
+            <code>VITE_FIREBASE_APP_ID</code> to <code>.env</code> and restart.
           </p>
         </div>
       </div>
@@ -114,26 +154,71 @@ export default function Admin() {
 
   if (!isAdmin) {
     return (
-      <div className="grid">
-        <div className="panel">
-          <p className="eyebrow">Hidden · /admin</p>
-          <h1>Moderator sign-in</h1>
-          <p className="lede">
-            Single admin via Firebase Auth + <code>is_admin</code> claim or <code>admins</code> allowlist.
-            Ask the event owner to grant your UID, then sign in here. Firestore rules enforce everything
-            server-side.
+      <div className="admin-login-wrapper enter">
+        <div className="panel glass login-card">
+          <div className="login-icon-badge">
+            <ShieldAlert size={32} className="text-amber" />
+          </div>
+          <p className="eyebrow">Moderator Console</p>
+          <h2>Sign In to Moderate</h2>
+          <p className="lede" style={{ fontSize: "0.95rem" }}>
+            Single-operator sign-in for stage moderators. Event owner authorizes your UID in the admins collection.
           </p>
-          <form onSubmit={handleSignIn} className="grid">
+
+          <form onSubmit={handleSignIn} className="login-form">
             <div className="field">
-              <label htmlFor="a-email">Admin email</label>
-              <input id="a-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required autoComplete="username" />
+              <label htmlFor="a-email">Admin Email</label>
+              <div className="input-with-icon">
+                <Mail size={16} className="input-icon" />
+                <input
+                  id="a-email"
+                  type="email"
+                  className="glass-input"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                  autoComplete="username"
+                  placeholder="moderator@mec.edu"
+                />
+              </div>
             </div>
+
             <div className="field">
               <label htmlFor="a-pass">Password</label>
-              <input id="a-pass" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required autoComplete="current-password" />
+              <div className="input-with-icon">
+                <Lock size={16} className="input-icon" />
+                <input
+                  id="a-pass"
+                  type="password"
+                  className="glass-input"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  autoComplete="current-password"
+                  placeholder="••••••••••••"
+                />
+              </div>
             </div>
-            {authError && <p className="error" role="alert">{authError}</p>}
-            <button className="btn" type="submit" disabled={authBusy}>{authBusy ? "Signing in..." : "Sign in"}</button>
+
+            {authError && (
+              <div className="notice notice-error" role="alert">
+                {authError}
+              </div>
+            )}
+
+            <button className="btn btn-cta submit-btn" type="submit" disabled={authBusy}>
+              {authBusy ? (
+                <>
+                  <RefreshCw size={16} className="spinner" />
+                  <span>Signing In...</span>
+                </>
+              ) : (
+                <>
+                  <LogIn size={16} />
+                  <span>Enter Moderator Deck</span>
+                </>
+              )}
+            </button>
           </form>
         </div>
       </div>
@@ -141,56 +226,259 @@ export default function Admin() {
   }
 
   return (
-    <div className="grid">
-      <div>
-        <p className="eyebrow">Hidden · /admin · not linked in nav</p>
-        <h1>Moderate</h1>
-        <p className="lede">{pending.length} pending · {live.length} live · {rejected.length} rejected</p>
-        <div className="toolbar">
-          <button className="btn ghost small" type="button" onClick={() => void refresh()}>Refresh</button>
-          {isFirebaseConfigured && (
-            <button className="btn ghost small" type="button" onClick={() => void handleSignOut()}>Sign out{userEmail ? ` (${userEmail})` : ""}</button>
-          )}
+    <div className="admin-dashboard">
+      {/* Admin Top Header */}
+      <div className="admin-header">
+        <div>
+          <div className="wall-eyebrow">
+            <span className="live-tag">
+              <ShieldAlert size={12} />
+              <span>MODERATOR DESK</span>
+            </span>
+            <span>Private stage controls</span>
+          </div>
+          <h1>Live Moderation Deck</h1>
         </div>
-        {loading && <div className="notice">Loading queue...</div>}
-        {error && <div className="notice amber" role="alert">{error}</div>}
-        {actionError && <p className="error" role="alert">{actionError}</p>}
+
+        <div className="admin-user-toolbar">
+          <button className="btn ghost small" type="button" onClick={() => void refresh()}>
+            <RefreshCw size={14} />
+            <span>Sync</span>
+          </button>
+          <button className="btn danger small" type="button" onClick={() => void handleSignOut()}>
+            <LogOut size={14} />
+            <span>Sign out ({userEmail})</span>
+          </button>
+        </div>
       </div>
 
-      <section aria-label="Pending queue" className="queue">
-        <h2>Pending ({pending.length})</h2>
-        {pending.length === 0 && <div className="panel"><p className="lede">Queue is clear.</p></div>}
-        {pending.map((q, i) => (
-          <div key={q.id} className="card glass-card enter" style={{ "--d": `${Math.min(i, 8) * 60}ms` } as CSSProperties}>
-            <div className="card-top"><span className="handle">{q.display_handle}</span><span className="meta">{new Date(q.created_at).toLocaleString()}</span></div>
-            <div className="card-body">{q.body}</div>
-            <div className="admin-bar">
-              <button className="btn small" type="button" onClick={() => void act(q.id, "approved")}>Approve</button>
-              <button className="btn warn small" type="button" onClick={() => void act(q.id, "featured")}>Feature</button>
-              <button className="btn danger small" type="button" onClick={() => void act(q.id, "rejected")}>Reject</button>
-            </div>
+      {/* Admin Stats Grid */}
+      <div className="admin-stats-grid">
+        <button
+          type="button"
+          className={`stat-card glass ${activeTab === "pending" ? "active" : ""}`}
+          onClick={() => setActiveTab("pending")}
+        >
+          <div className="stat-card-top">
+            <span className="stat-card-title">Pending Review</span>
+            <Clock size={16} className="text-amber" />
           </div>
-        ))}
-      </section>
+          <span className={`stat-card-value ${pending.length > 0 ? "highlight-amber" : ""}`}>
+            {pending.length}
+          </span>
+          <span className="stat-card-hint">
+            {pending.length > 0 ? "Awaiting decision" : "Queue is clear"}
+          </span>
+        </button>
 
-      <section aria-label="Live" className="queue live-grid">
-        <h2 style={{ gridColumn: "1 / -1" }}>Live ({live.length})</h2>
-        {live.map((q, i) => (
-          <div key={q.id} className={q.status === "featured" ? "card glass-card enter featured" : "card glass-card enter"} style={{ "--d": `${Math.min(i, 8) * 60}ms` } as CSSProperties}>
-            <div className="card-top">
-              {q.status === "featured" && <span className="badge">Featured</span>}
-              <span className="handle">{q.display_handle}</span>
-              <span className="meta">{q.upvote_count} votes</span>
+        <button
+          type="button"
+          className={`stat-card glass ${activeTab === "live" ? "active" : ""}`}
+          onClick={() => setActiveTab("live")}
+        >
+          <div className="stat-card-top">
+            <span className="stat-card-title">Live on Wall</span>
+            <CheckCircle size={16} className="text-phosphor" />
+          </div>
+          <span className="stat-card-value">{live.length}</span>
+          <span className="stat-card-hint">Visible to audience</span>
+        </button>
+
+        <button
+          type="button"
+          className="stat-card glass"
+          onClick={() => setActiveTab("live")}
+        >
+          <div className="stat-card-top">
+            <span className="stat-card-title">Featured Spotlight</span>
+            <Sparkles size={16} className="text-gold" />
+          </div>
+          <span className="stat-card-value">{featured.length}</span>
+          <span className="stat-card-hint">Top projector prominence</span>
+        </button>
+
+        <button
+          type="button"
+          className={`stat-card glass ${activeTab === "rejected" ? "active" : ""}`}
+          onClick={() => setActiveTab("rejected")}
+        >
+          <div className="stat-card-top">
+            <span className="stat-card-title">Rejected</span>
+            <XCircle size={16} className="text-danger" />
+          </div>
+          <span className="stat-card-value">{rejected.length}</span>
+          <span className="stat-card-hint">Hidden from audience</span>
+        </button>
+      </div>
+
+      {/* Action Notices */}
+      {error && (
+        <div className="notice amber enter" role="alert">
+          {error}
+        </div>
+      )}
+      {actionError && (
+        <div className="notice notice-error enter" role="alert">
+          {actionError}
+        </div>
+      )}
+      {actionSuccess && (
+        <div className="notice notice-success enter" role="status">
+          {actionSuccess}
+        </div>
+      )}
+
+      {/* Filter and Search Bar */}
+      <div className="admin-filter-bar glass">
+        <div className="filter-tabs">
+          <button
+            type="button"
+            className={`filter-tab ${activeTab === "pending" ? "active" : ""}`}
+            onClick={() => setActiveTab("pending")}
+          >
+            Pending ({pending.length})
+          </button>
+          <button
+            type="button"
+            className={`filter-tab ${activeTab === "live" ? "active" : ""}`}
+            onClick={() => setActiveTab("live")}
+          >
+            Live ({live.length})
+          </button>
+          <button
+            type="button"
+            className={`filter-tab ${activeTab === "rejected" ? "active" : ""}`}
+            onClick={() => setActiveTab("rejected")}
+          >
+            Rejected ({rejected.length})
+          </button>
+          <button
+            type="button"
+            className={`filter-tab ${activeTab === "all" ? "active" : ""}`}
+            onClick={() => setActiveTab("all")}
+          >
+            All ({rows.length})
+          </button>
+        </div>
+
+        <div className="search-box">
+          <Search size={14} className="search-icon" />
+          <input
+            type="text"
+            className="search-input"
+            placeholder="Search questions in queue..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
+      </div>
+
+      {/* Queue List */}
+      <div className="admin-queue-list">
+        {loading && (
+          <div className="notice enter">
+            <RefreshCw size={16} className="spinner" />
+            <span>Updating moderation list...</span>
+          </div>
+        )}
+
+        {!loading && displayedQuestions.length === 0 && (
+          <div className="panel glass enter" style={{ textAlign: "center", padding: "40px" }}>
+            <p className="lede" style={{ margin: 0 }}>
+              {search ? "No questions match your search." : `No questions in ${activeTab} queue.`}
+            </p>
+          </div>
+        )}
+
+        {displayedQuestions.map((q, i) => (
+          <div
+            key={q.id}
+            className={`admin-question-card glass-card enter ${q.status === "featured" ? "featured" : ""}`}
+            style={{ "--d": `${Math.min(i, 8) * 40}ms` } as CSSProperties}
+          >
+            <div className="admin-card-header">
+              <div className="admin-card-badges">
+                <span className={`status-pill pill-${q.status}`}>{q.status}</span>
+                <span className="handle">{q.display_handle}</span>
+              </div>
+              <div className="admin-card-meta">
+                <span>
+                  <Clock size={12} style={{ display: "inline", marginRight: 4 }} />
+                  {timeAgo(q.created_at)}
+                </span>
+                <span>
+                  <ThumbsUp size={12} style={{ display: "inline", marginRight: 4 }} />
+                  {q.upvote_count} votes
+                </span>
+              </div>
             </div>
-            <div className="card-body">{q.body}</div>
-            <div className="admin-bar">
-              {q.status !== "featured" && <button className="btn warn small" type="button" onClick={() => void act(q.id, "featured")}>Feature</button>}
-              {q.status === "featured" && <button className="btn ghost small" type="button" onClick={() => void act(q.id, "approved")}>Unfeature</button>}
-              <button className="btn danger small" type="button" onClick={() => void act(q.id, "rejected")}>Remove</button>
+
+            <div className="admin-card-body">{q.body}</div>
+
+            <div className="admin-actions-bar">
+              {q.status !== "approved" && (
+                <button
+                  type="button"
+                  className="btn small"
+                  onClick={() => void act(q.id, "approved")}
+                  title="Approve for live wall"
+                >
+                  <CheckCircle size={14} />
+                  <span>Approve</span>
+                </button>
+              )}
+
+              {q.status !== "featured" && (
+                <button
+                  type="button"
+                  className="btn warn small"
+                  onClick={() => void act(q.id, "featured")}
+                  title="Pin to top featured section with gold spotlight"
+                >
+                  <Sparkles size={14} />
+                  <span>Feature</span>
+                </button>
+              )}
+
+              {q.status === "featured" && (
+                <button
+                  type="button"
+                  className="btn ghost small"
+                  onClick={() => void act(q.id, "approved")}
+                  title="Demote to normal approved question"
+                >
+                  <RotateCcw size={14} />
+                  <span>Unfeature</span>
+                </button>
+              )}
+
+              {q.status !== "rejected" && (
+                <button
+                  type="button"
+                  className="btn danger small"
+                  onClick={() => void act(q.id, "rejected")}
+                  title="Hide from audience"
+                >
+                  <XCircle size={14} />
+                  <span>Reject</span>
+                </button>
+              )}
+
+              {q.status === "rejected" && (
+                <button
+                  type="button"
+                  className="btn ghost small"
+                  onClick={() => void act(q.id, "pending")}
+                  title="Return to pending review"
+                >
+                  <RotateCcw size={14} />
+                  <span>Re-evaluate</span>
+                </button>
+              )}
             </div>
           </div>
         ))}
-      </section>
+      </div>
     </div>
   );
 }

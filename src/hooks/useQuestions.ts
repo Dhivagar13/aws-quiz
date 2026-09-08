@@ -76,6 +76,24 @@ export function sortWall(rows: Question[]): Question[] {
   });
 }
 
+function parseFirestoreError(e: unknown): string {
+  if (!(e instanceof Error)) return "Failed to load questions.";
+  const msg = e.message;
+  if (msg.includes("PERMISSION_DENIED") || msg.includes("permission-denied")) {
+    if (msg.includes("Cloud Firestore API has not been used") || msg.includes("disabled")) {
+      return "Cloud Firestore API is not enabled on project aws-questions-inaug. Enable Firestore Database in Firebase Console.";
+    }
+    return "Firestore access permission denied. Check your Firestore Security Rules.";
+  }
+  if (msg.includes("requires an index")) {
+    return "Firestore query requires an index. Deploy firestore.indexes.json or create the index in Firebase Console.";
+  }
+  if (msg.includes("timed out") || msg.includes("timeout")) {
+    return "Connection to Firestore timed out. Retrying in background...";
+  }
+  return msg;
+}
+
 export function useQuestions(scope: Scope) {
   const [rows, setRows] = useState<Question[]>([]);
   const [loading, setLoading] = useState(true);
@@ -94,37 +112,42 @@ export function useQuestions(scope: Scope) {
     try {
       setError(null);
       const base = collection(db, "questions");
-      // Wall filters server-side to approved/featured only. Featured-first
-      // ordering stays client-side in sortWall so the projector order is
-      // stable even when votes arrive out of order.
-      // NOTE: where(status in [...]) + orderBy(created_at) needs the
-      // composite index in firestore.indexes.json.
       const q =
         scope === "wall"
           ? query(base, where("status", "in", ["approved", "featured"]), orderBy("created_at", "desc"), limit(200))
           : query(base, orderBy("created_at", "desc"), limit(200));
-      const snap = await getDocs(q);
+
+      const snapPromise = getDocs(q);
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("Firestore connection timed out")), 3500)
+      );
+
+      const snap = await Promise.race([snapPromise, timeoutPromise]);
       const list = snap.docs.map((d) => toQuestion(d.id, d.data()));
       setRows(scope === "wall" ? sortWall(list) : list);
       setLastSync(new Date().toISOString());
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load questions.");
+      setError(parseFirestoreError(e));
     } finally {
       setLoading(false);
     }
   }, [scope]);
 
   useEffect(() => {
-    setLoading(true);
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void fetchRows();
 
-    // Polling is live resilience: college WiFi may block websockets even
-    // with Firestore long-polling enabled. onSnapshot + 5s poll stay on.
+    // Safety timeout ensures loading spinner never stays indefinitely
+    const safetyTimer = window.setTimeout(() => {
+      setLoading(false);
+    }, 3500);
+
     const timer = window.setInterval(() => {
       void fetchRows();
     }, POLL_INTERVAL_MS);
 
     if (!isFirebaseConfigured || !db) {
+      window.clearTimeout(safetyTimer);
       return () => window.clearInterval(timer);
     }
 
@@ -137,6 +160,7 @@ export function useQuestions(scope: Scope) {
     const unsub = onSnapshot(
       liveQuery,
       (snap) => {
+        window.clearTimeout(safetyTimer);
         const list = snap.docs.map((d) => toQuestion(d.id, d.data()));
         setRows(scope === "wall" ? sortWall(list) : list);
         setLastSync(new Date().toISOString());
@@ -144,12 +168,14 @@ export function useQuestions(scope: Scope) {
         setError(null);
       },
       (err) => {
-        setError(err.message || "Live updates paused. Polling every 5s.");
+        window.clearTimeout(safetyTimer);
+        setError(parseFirestoreError(err));
         setLoading(false);
       },
     );
 
     return () => {
+      window.clearTimeout(safetyTimer);
       window.clearInterval(timer);
       unsub();
     };
@@ -164,16 +190,25 @@ export function useQuestions(scope: Scope) {
 
       if (!isFirebaseConfigured || !db) throw new Error(LIVE_CONFIG_ERROR);
 
-      // Anonymous create is pending-only. Rules reject any other status,
-      // out-of-range body, bad handle, or non-zero upvote_count.
-      await addDoc(collection(db, "questions"), {
+      const addPromise = addDoc(collection(db, "questions"), {
         body,
         display_handle,
         status: "pending",
         upvote_count: 0,
         created_at: serverTimestamp(),
       });
-      await fetchRows();
+
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("Posting timed out. Please check your network or Firestore setup.")), 5000)
+      );
+
+      try {
+        await Promise.race([addPromise, timeoutPromise]);
+      } catch (submitErr) {
+        throw new Error(parseFirestoreError(submitErr));
+      }
+
+      void fetchRows();
       return display_handle;
     },
     [fetchRows],

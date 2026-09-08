@@ -50,7 +50,7 @@ Rules at a glance:
 
 Missing env shows: `Live setup required: Firebase env is missing.` No seed rows, no browser-only posts. Fill `.env` and restart to go live.
 
-## Host quickstart, 10 minutes
+## Host setup, 10 minutes
 
 This is the full path from clone to projector.
 
