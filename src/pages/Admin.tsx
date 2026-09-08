@@ -24,9 +24,9 @@ import {
 type AdminTab = "pending" | "live" | "rejected" | "all";
 
 export default function Admin() {
-  const { rows, loading, error, refresh, setStatus } = useQuestions("admin");
-  const [actionError, setActionError] = useState<string | null>(null);
-  const [actionSuccess, setActionSuccess] = useState<string | null>(null);
+  // Auth gate only. The admin Firestore list lives in <AdminDeck/>, which
+  // mounts only when isAdmin is true, so anon never triggers the admin
+  // query (and its permission-denied noise) while !isAdmin.
   const [isAdmin, setIsAdmin] = useState(false);
   const [authInstance, setAuthInstance] = useState<Auth | null>(null);
   const [authChecking, setAuthChecking] = useState(() => Boolean(isFirebaseConfigured && firebaseApp && db));
@@ -35,8 +35,6 @@ export default function Admin() {
   const [password, setPassword] = useState("");
   const [authBusy, setAuthBusy] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<AdminTab>("pending");
-  const [search, setSearch] = useState("");
 
   useEffect(() => {
     if (!isFirebaseConfigured || !db || !firebaseApp) {
@@ -115,39 +113,6 @@ export default function Admin() {
     setIsAdmin(false);
     setUserEmail(null);
   }
-
-  async function act(id: string, status: QuestionStatus): Promise<void> {
-    setActionError(null);
-    setActionSuccess(null);
-    try {
-      await setStatus(id, status);
-      setActionSuccess(`Question updated to ${status}.`);
-      setTimeout(() => setActionSuccess(null), 2500);
-    } catch (e) {
-      setActionError(e instanceof Error ? e.message : "Moderation failed. Check rules / admin allowlist.");
-    }
-  }
-
-  const pending = useMemo(() => rows.filter((q) => q.status === "pending"), [rows]);
-  const live = useMemo(() => rows.filter((q) => q.status === "approved" || q.status === "featured"), [rows]);
-  const featured = useMemo(() => rows.filter((q) => q.status === "featured"), [rows]);
-  const rejected = useMemo(() => rows.filter((q) => q.status === "rejected"), [rows]);
-
-  const displayedQuestions = useMemo(() => {
-    let list: Question[] = [];
-    if (activeTab === "pending") list = pending;
-    else if (activeTab === "live") list = live;
-    else if (activeTab === "rejected") list = rejected;
-    else list = rows;
-
-    if (search.trim()) {
-      const q = search.toLowerCase().trim();
-      list = list.filter(
-        (item) => item.body.toLowerCase().includes(q) || item.display_handle.toLowerCase().includes(q)
-      );
-    }
-    return list;
-  }, [activeTab, pending, live, rejected, rows, search]);
 
   if (authChecking) {
     return (
@@ -249,6 +214,58 @@ export default function Admin() {
     );
   }
 
+  return <AdminDeck userEmail={userEmail} onSignOut={handleSignOut} />;
+}
+
+function AdminDeck({
+  userEmail,
+  onSignOut,
+}: {
+  userEmail: string | null;
+  onSignOut: () => void | Promise<void>;
+}) {
+  // Mounted only when isAdmin is true, so the admin-scoped list query
+  // (unfiltered orderBy) never runs for anon. Any error here is a real
+  // admin error, never false deny noise from the pre-auth state.
+  const { rows, loading, error, refresh, setStatus } = useQuestions("admin");
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [actionSuccess, setActionSuccess] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<AdminTab>("pending");
+  const [search, setSearch] = useState("");
+
+  async function act(id: string, status: QuestionStatus): Promise<void> {
+    setActionError(null);
+    setActionSuccess(null);
+    try {
+      await setStatus(id, status);
+      setActionSuccess(`Question updated to ${status}.`);
+      setTimeout(() => setActionSuccess(null), 2500);
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : "Moderation failed. Check rules / admin allowlist.");
+    }
+  }
+
+  const pending = useMemo(() => rows.filter((q) => q.status === "pending"), [rows]);
+  const live = useMemo(() => rows.filter((q) => q.status === "approved" || q.status === "featured"), [rows]);
+  const featured = useMemo(() => rows.filter((q) => q.status === "featured"), [rows]);
+  const rejected = useMemo(() => rows.filter((q) => q.status === "rejected"), [rows]);
+
+  const displayedQuestions = useMemo(() => {
+    let list: Question[] = [];
+    if (activeTab === "pending") list = pending;
+    else if (activeTab === "live") list = live;
+    else if (activeTab === "rejected") list = rejected;
+    else list = rows;
+
+    if (search.trim()) {
+      const q = search.toLowerCase().trim();
+      list = list.filter(
+        (item) => item.body.toLowerCase().includes(q) || item.display_handle.toLowerCase().includes(q)
+      );
+    }
+    return list;
+  }, [activeTab, pending, live, rejected, rows, search]);
+
   return (
     <div className="admin-dashboard">
       {/* Admin Top Header */}
@@ -269,7 +286,7 @@ export default function Admin() {
             <RefreshCw size={14} />
             <span>Sync</span>
           </button>
-          <button className="btn danger small" type="button" onClick={() => void handleSignOut()}>
+          <button className="btn danger small" type="button" onClick={() => void onSignOut()}>
             <LogOut size={14} />
             <span>Sign out ({userEmail})</span>
           </button>

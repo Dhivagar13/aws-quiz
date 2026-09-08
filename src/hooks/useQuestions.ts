@@ -3,7 +3,6 @@ import {
   addDoc,
   collection,
   doc,
-  getDoc,
   getDocs,
   increment,
   limit,
@@ -276,15 +275,10 @@ export function useQuestions(scope: Scope) {
       const questionRef = doc(firestore, "questions", id);
       const voteRef = doc(firestore, "questions", id, "votes", voterHash);
 
-      // Dedup is triple-guarded: localStorage set + vote doc-ID existence
+      // Dedup is triple-guarded: localStorage set + tx vote doc-ID existence
       // check + rules !exists() guard. Count moves exactly +1 via increment.
-      const existing = await getDoc(voteRef);
-      if (existing.exists()) {
-        markVoted(id);
-        setVoted(getVotedIds());
-        throw new Error("You already upvoted this question on this device.");
-      }
-
+      // No outer getDoc pre-read: anon get on votes is allowed only inside
+      // the live-parent tx path, and the pre-read caused false deny noise.
       try {
         await runTransaction(firestore, async (tx) => {
           const qSnap = await tx.get(questionRef);
@@ -300,9 +294,21 @@ export function useQuestions(scope: Scope) {
         });
       } catch (e) {
         const msg = e instanceof Error ? e.message : "Upvote failed.";
-        if (msg.toLowerCase().includes("already upvoted")) {
+        const lower = msg.toLowerCase();
+        if (lower.includes("already upvoted")) {
           markVoted(id);
           setVoted(getVotedIds());
+        } else if (
+          lower.includes("permission-denied") ||
+          lower.includes("permission_denied") ||
+          lower.includes("already-exists") ||
+          lower.includes("already_exists") ||
+          lower.includes("already exists")
+        ) {
+          // Rules create guard !exists() rejects duplicates as denied.
+          markVoted(id);
+          setVoted(getVotedIds());
+          throw new Error("You already upvoted this question on this device.");
         }
         throw e instanceof Error ? e : new Error(msg);
       }
