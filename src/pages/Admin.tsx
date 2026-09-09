@@ -17,6 +17,8 @@ import {
   Lock,
   Mail,
   Clock,
+  Eye,
+  EyeOff,
   ThumbsUp,
   RotateCcw,
 } from "lucide-react";
@@ -66,7 +68,7 @@ function mapAuthError(e: unknown): string {
     combined.includes("invalid-email") ||
     combined.includes("invalid email")
   ) {
-    return "Invalid email or password. Try again.";
+    return "Wrong email or password. Try again.";
   }
   return e.message;
 }
@@ -81,8 +83,10 @@ export default function Admin() {
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [authBusy, setAuthBusy] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
+  const isCredentialError = authError === "Wrong email or password. Try again.";
 
   useEffect(() => {
     if (!isFirebaseConfigured || !db || !firebaseApp) {
@@ -214,6 +218,7 @@ export default function Admin() {
           </p>
 
           <form onSubmit={handleSignIn} className="login-form">
+            <style>{`.password-toggle:focus-visible{outline:2px solid var(--amber,#f59e0b);outline-offset:2px;border-radius:8px;}`}</style>
             <div className="field">
               <label htmlFor="a-email">Admin Email</label>
               <div className="input-with-icon">
@@ -227,6 +232,8 @@ export default function Admin() {
                   required
                   autoComplete="username"
                   placeholder="moderator@mec.edu"
+                  aria-invalid={isCredentialError || undefined}
+                  aria-describedby={authError ? "admin-auth-error" : undefined}
                 />
               </div>
             </div>
@@ -237,19 +244,44 @@ export default function Admin() {
                 <Lock size={16} className="input-icon" />
                 <input
                   id="a-pass"
-                  type="password"
+                  type={showPassword ? "text" : "password"}
                   className="glass-input"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
                   autoComplete="current-password"
                   placeholder="••••••••••••"
+                  aria-invalid={isCredentialError || undefined}
+                  aria-describedby={authError ? "admin-auth-error" : undefined}
+                  style={{ paddingRight: "52px" }}
                 />
+                <button
+                  type="button"
+                  className="password-toggle"
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                  aria-pressed={showPassword}
+                  onClick={() => setShowPassword((v) => !v)}
+                  style={{
+                    position: "absolute",
+                    right: "4px",
+                    width: "44px",
+                    height: "44px",
+                    display: "grid",
+                    placeItems: "center",
+                    background: "transparent",
+                    border: "0",
+                    cursor: "pointer",
+                    color: "inherit",
+                    borderRadius: "8px",
+                  }}
+                >
+                  {showPassword ? <EyeOff size={18} aria-hidden="true" /> : <Eye size={18} aria-hidden="true" />}
+                </button>
               </div>
             </div>
 
             {authError && (
-              <div className="notice notice-error" role="alert">
+              <div id="admin-auth-error" className="notice notice-error" role="alert">
                 <span>{authError}</span>
                 <button
                   className="btn ghost small"
