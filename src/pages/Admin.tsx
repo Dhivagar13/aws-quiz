@@ -23,6 +23,54 @@ import {
 
 type AdminTab = "pending" | "live" | "rejected" | "all";
 
+const AUTH_TIMEOUT_MS = 12000;
+
+function withAuthTimeout<T>(promise: Promise<T>, message = "Sign-in timed out after 12s. Check your connection, then try again."): Promise<T> {
+  let timer = 0;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = window.setTimeout(() => reject(new Error(message)), AUTH_TIMEOUT_MS);
+  });
+  return Promise.race([promise, timeout]).finally(() => window.clearTimeout(timer));
+}
+
+function mapAuthError(e: unknown): string {
+  if (typeof navigator !== "undefined" && !navigator.onLine) {
+    return "You are offline. Check your connection, then try again.";
+  }
+  if (!(e instanceof Error)) return "Sign-in failed. Try again.";
+  const combined = `${(e as { code?: unknown }).code ?? ""} ${e.message}`.toLowerCase();
+  if (combined.includes("timed out") || combined.includes("timeout")) {
+    return "Sign-in timed out after 12s. Check your connection, then try again.";
+  }
+  if (
+    combined.includes("network-request-failed") ||
+    combined.includes("network") ||
+    combined.includes("failed to fetch") ||
+    combined.includes("unavailable")
+  ) {
+    return "Network error during sign-in. Check your connection, then try again.";
+  }
+  if (combined.includes("too-many-requests") || combined.includes("too many requests")) {
+    return "Too many attempts. Wait a moment, then try again.";
+  }
+  if (combined.includes("operation-not-allowed") || combined.includes("operation not allowed")) {
+    return "Email sign-in is disabled for this project. Enable Email/Password in Firebase Console.";
+  }
+  if (
+    combined.includes("invalid-credential") ||
+    combined.includes("invalid credential") ||
+    combined.includes("user-not-found") ||
+    combined.includes("user not found") ||
+    combined.includes("wrong-password") ||
+    combined.includes("wrong password") ||
+    combined.includes("invalid-email") ||
+    combined.includes("invalid email")
+  ) {
+    return "Invalid email or password. Try again.";
+  }
+  return e.message;
+}
+
 export default function Admin() {
   // Auth gate only. The admin Firestore list lives in <AdminDeck/>, which
   // mounts only when isAdmin is true, so anon never triggers the admin
@@ -61,12 +109,18 @@ export default function Admin() {
             }
             try {
               // Admin if custom claim is_admin == true OR admins/{uid} doc exists.
-              const token = await getIdTokenResult(user, true).catch(() => getIdTokenResult(user));
+              const token = await withAuthTimeout(
+                getIdTokenResult(user, true).catch(() => getIdTokenResult(user)),
+                "Checking admin status timed out. Try signing in again.",
+              );
               const claimAdmin = (token.claims as Record<string, unknown>).is_admin === true;
               if (claimAdmin) {
                 setIsAdmin(true);
               } else {
-                const snap = await getDoc(doc(db, "admins", user.uid));
+                const snap = await withAuthTimeout(
+                  getDoc(doc(db, "admins", user.uid)),
+                  "Checking admin status timed out. Try signing in again.",
+                );
                 setIsAdmin(snap.exists());
               }
               setUserEmail(user.email);
@@ -88,21 +142,26 @@ export default function Admin() {
     };
   }, []);
 
-  async function handleSignIn(e: FormEvent): Promise<void> {
-    e.preventDefault();
+  async function doSignIn(): Promise<void> {
+    if (authBusy) return;
     setAuthBusy(true);
     setAuthError(null);
     try {
-      const auth = authInstance ?? (await loadAdminAuth());
+      const auth = authInstance ?? (await withAuthTimeout(loadAdminAuth()));
       if (!authInstance) setAuthInstance(auth);
       const { signInWithEmailAndPassword } = await import("firebase/auth");
-      await signInWithEmailAndPassword(auth, email.trim(), password);
+      await withAuthTimeout(signInWithEmailAndPassword(auth, email.trim(), password));
       setPassword("");
     } catch (err) {
-      setAuthError(err instanceof Error ? err.message : "Sign-in failed.");
+      setAuthError(mapAuthError(err));
     } finally {
       setAuthBusy(false);
     }
+  }
+
+  async function handleSignIn(e: FormEvent): Promise<void> {
+    e.preventDefault();
+    await doSignIn();
   }
 
   async function handleSignOut(): Promise<void> {
@@ -191,7 +250,17 @@ export default function Admin() {
 
             {authError && (
               <div className="notice notice-error" role="alert">
-                {authError}
+                <span>{authError}</span>
+                <button
+                  className="btn ghost small"
+                  type="button"
+                  disabled={authBusy}
+                  onClick={() => void doSignIn()}
+                  style={{ marginTop: "12px" }}
+                >
+                  <RefreshCw size={14} />
+                  <span>Try again</span>
+                </button>
               </div>
             )}
 
