@@ -23,7 +23,7 @@ import {
   RotateCcw,
 } from "lucide-react";
 
-type AdminTab = "pending" | "live" | "rejected" | "all";
+type AdminTab = "pending" | "live" | "featured" | "rejected" | "all";
 
 const AUTH_TIMEOUT_MS = 12000;
 
@@ -333,16 +333,28 @@ function AdminDeck({
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<AdminTab>("pending");
   const [search, setSearch] = useState("");
+  const [busyId, setBusyId] = useState<string | null>(null);
 
   async function act(id: string, status: QuestionStatus): Promise<void> {
+    if (busyId !== null) return;
+    setBusyId(id);
     setActionError(null);
     setActionSuccess(null);
     try {
       await setStatus(id, status);
-      setActionSuccess(`Question updated to ${status}.`);
+      // Round-trip: featured pins to Wall top, approved restores to Live queue.
+      setActionSuccess(
+        status === "featured"
+          ? "Pinned to Wall spotlight."
+          : status === "approved"
+            ? "Returned to Live queue."
+            : `Question updated to ${status}.`,
+      );
       setTimeout(() => setActionSuccess(null), 2500);
     } catch (e) {
       setActionError(e instanceof Error ? e.message : "Moderation failed. Check rules / admin allowlist.");
+    } finally {
+      setBusyId(null);
     }
   }
 
@@ -355,6 +367,7 @@ function AdminDeck({
     let list: Question[] = [];
     if (activeTab === "pending") list = pending;
     else if (activeTab === "live") list = live;
+    else if (activeTab === "featured") list = featured;
     else if (activeTab === "rejected") list = rejected;
     else list = rows;
 
@@ -365,7 +378,7 @@ function AdminDeck({
       );
     }
     return list;
-  }, [activeTab, pending, live, rejected, rows, search]);
+  }, [activeTab, pending, live, featured, rejected, rows, search]);
 
   return (
     <div className="admin-dashboard">
@@ -400,6 +413,7 @@ function AdminDeck({
           type="button"
           className={`stat-card glass ${activeTab === "pending" ? "active" : ""}`}
           onClick={() => setActiveTab("pending")}
+          aria-pressed={activeTab === "pending"}
         >
           <div className="stat-card-top">
             <span className="stat-card-title">Pending Review</span>
@@ -417,6 +431,7 @@ function AdminDeck({
           type="button"
           className={`stat-card glass ${activeTab === "live" ? "active" : ""}`}
           onClick={() => setActiveTab("live")}
+          aria-pressed={activeTab === "live"}
         >
           <div className="stat-card-top">
             <span className="stat-card-title">Live on Wall</span>
@@ -428,21 +443,25 @@ function AdminDeck({
 
         <button
           type="button"
-          className="stat-card glass"
-          onClick={() => setActiveTab("live")}
+          className={`stat-card glass ${activeTab === "featured" ? "active" : ""}`}
+          onClick={() => setActiveTab("featured")}
+          aria-pressed={activeTab === "featured"}
         >
           <div className="stat-card-top">
             <span className="stat-card-title">Featured Spotlight</span>
             <Sparkles size={16} className="text-gold" />
           </div>
           <span className="stat-card-value">{featured.length}</span>
-          <span className="stat-card-hint">Top projector prominence</span>
+          <span className="stat-card-hint">
+            {featured.length === 0 ? "Nothing pinned - feature one" : "Pinned to projector top"}
+          </span>
         </button>
 
         <button
           type="button"
           className={`stat-card glass ${activeTab === "rejected" ? "active" : ""}`}
           onClick={() => setActiveTab("rejected")}
+          aria-pressed={activeTab === "rejected"}
         >
           <div className="stat-card-top">
             <span className="stat-card-title">Rejected</span>
@@ -454,6 +473,7 @@ function AdminDeck({
       </div>
 
       {/* Action Notices */}
+      <div aria-live="polite">
       {error && (
         <div className="notice amber enter" role="alert">
           {error}
@@ -469,6 +489,16 @@ function AdminDeck({
           {actionSuccess}
         </div>
       )}
+      </div>
+      {featured.length > 1 && (
+        <div className="notice amber" role="note">
+          <Sparkles size={16} aria-hidden="true" />
+          <span>
+            {featured.length} questions pinned. Wall shows all pinned first, ordered by votes. Unfeature to
+            return one to the Live queue.
+          </span>
+        </div>
+      )}
 
       {/* Filter and Search Bar */}
       <div className="admin-filter-bar glass">
@@ -477,6 +507,7 @@ function AdminDeck({
             type="button"
             className={`filter-tab ${activeTab === "pending" ? "active" : ""}`}
             onClick={() => setActiveTab("pending")}
+            aria-pressed={activeTab === "pending"}
           >
             Pending ({pending.length})
           </button>
@@ -484,13 +515,23 @@ function AdminDeck({
             type="button"
             className={`filter-tab ${activeTab === "live" ? "active" : ""}`}
             onClick={() => setActiveTab("live")}
+            aria-pressed={activeTab === "live"}
           >
             Live ({live.length})
           </button>
           <button
             type="button"
+            className={`filter-tab ${activeTab === "featured" ? "active" : ""}`}
+            onClick={() => setActiveTab("featured")}
+            aria-pressed={activeTab === "featured"}
+          >
+            Featured ({featured.length})
+          </button>
+          <button
+            type="button"
             className={`filter-tab ${activeTab === "rejected" ? "active" : ""}`}
             onClick={() => setActiveTab("rejected")}
+            aria-pressed={activeTab === "rejected"}
           >
             Rejected ({rejected.length})
           </button>
@@ -498,6 +539,7 @@ function AdminDeck({
             type="button"
             className={`filter-tab ${activeTab === "all" ? "active" : ""}`}
             onClick={() => setActiveTab("all")}
+            aria-pressed={activeTab === "all"}
           >
             All ({rows.length})
           </button>
@@ -516,7 +558,7 @@ function AdminDeck({
       </div>
 
       {/* Queue List */}
-      <div className="admin-queue-list">
+      <div className="admin-queue-list" aria-live="polite" aria-busy={busyId !== null}>
         {loading && (
           <div className="notice enter">
             <RefreshCw size={16} className="spinner" />
@@ -526,9 +568,20 @@ function AdminDeck({
 
         {!loading && displayedQuestions.length === 0 && (
           <div className="panel glass enter" style={{ textAlign: "center", padding: "40px" }}>
+            <Sparkles size={28} className="text-gold" aria-hidden="true" style={{ margin: "0 auto 12px" }} />
             <p className="lede" style={{ margin: 0 }}>
-              {search ? "No questions match your search." : `No questions in ${activeTab} queue.`}
+              {search
+                ? "No questions match your search."
+                : activeTab === "featured"
+                  ? "Nothing pinned yet. Feature a Live question to pin it to the top of the Wall spotlight."
+                  : `No questions in ${activeTab} queue.`}
             </p>
+            {!search && activeTab === "featured" && live.length > 0 && (
+              <button type="button" className="btn ghost small" onClick={() => setActiveTab("live")}>
+                <CheckCircle size={14} />
+                <span>View Live queue</span>
+              </button>
+            )}
           </div>
         )}
 
@@ -564,9 +617,14 @@ function AdminDeck({
                   className="btn small"
                   onClick={() => void act(q.id, "approved")}
                   title="Approve for live wall"
+                  disabled={busyId !== null}
                 >
-                  <CheckCircle size={14} />
-                  <span>Approve</span>
+                  {busyId === q.id ? (
+                    <RefreshCw size={14} className="spinner" aria-hidden="true" />
+                  ) : (
+                    <CheckCircle size={14} aria-hidden="true" />
+                  )}
+                  <span>{busyId === q.id ? "Working..." : "Approve"}</span>
                 </button>
               )}
 
@@ -576,9 +634,14 @@ function AdminDeck({
                   className="btn warn small"
                   onClick={() => void act(q.id, "featured")}
                   title="Pin to top featured section with gold spotlight"
+                  disabled={busyId !== null}
                 >
-                  <Sparkles size={14} />
-                  <span>Feature</span>
+                  {busyId === q.id ? (
+                    <RefreshCw size={14} className="spinner" aria-hidden="true" />
+                  ) : (
+                    <Sparkles size={14} aria-hidden="true" />
+                  )}
+                  <span>{busyId === q.id ? "Pinning..." : "Feature"}</span>
                 </button>
               )}
 
@@ -587,10 +650,16 @@ function AdminDeck({
                   type="button"
                   className="btn ghost small"
                   onClick={() => void act(q.id, "approved")}
-                  title="Demote to normal approved question"
+                  title="Demote to normal approved question - returns to Live queue"
+                  disabled={busyId !== null}
+                  aria-pressed={true}
                 >
-                  <RotateCcw size={14} />
-                  <span>Unfeature</span>
+                  {busyId === q.id ? (
+                    <RefreshCw size={14} className="spinner" aria-hidden="true" />
+                  ) : (
+                    <RotateCcw size={14} aria-hidden="true" />
+                  )}
+                  <span>{busyId === q.id ? "Unpinning..." : "Unfeature"}</span>
                 </button>
               )}
 
@@ -600,8 +669,9 @@ function AdminDeck({
                   className="btn danger small"
                   onClick={() => void act(q.id, "rejected")}
                   title="Hide from audience"
+                  disabled={busyId !== null}
                 >
-                  <XCircle size={14} />
+                  <XCircle size={14} aria-hidden="true" />
                   <span>Reject</span>
                 </button>
               )}
@@ -612,8 +682,9 @@ function AdminDeck({
                   className="btn ghost small"
                   onClick={() => void act(q.id, "pending")}
                   title="Return to pending review"
+                  disabled={busyId !== null}
                 >
-                  <RotateCcw size={14} />
+                  <RotateCcw size={14} aria-hidden="true" />
                   <span>Re-evaluate</span>
                 </button>
               )}

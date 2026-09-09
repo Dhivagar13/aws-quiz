@@ -346,18 +346,36 @@ export default function Wall() {
       {!loading && filteredRows.length === 0 && (
         <div className="panel glass empty-wall-panel enter">
           <div className="empty-wall-icon">
-            <MessageSquare size={36} className="text-amber" />
+            {activeTab === "featured" && !search ? (
+              <Sparkles size={36} className="text-gold" aria-hidden="true" />
+            ) : (
+              <MessageSquare size={36} className="text-amber" aria-hidden="true" />
+            )}
           </div>
-          <h2>{search ? "No matching questions found" : "No approved questions yet"}</h2>
+          <h2>
+            {search
+              ? "No matching questions found"
+              : activeTab === "featured"
+                ? "Nothing pinned to the spotlight yet"
+                : "No approved questions yet"}
+          </h2>
           <p className="lede">
             {search
               ? "Try searching for a different keyword, or clear your search."
-              : "Be the first attendee to post! Scan the QR code or tap below to ask anonymously from your phone."}
+              : activeTab === "featured"
+                ? rows.length > 0
+                  ? "A moderator has not pinned anything yet. Browse all live questions while you wait."
+                  : "Be the first attendee to post! Scan the QR code or tap below to ask anonymously from your phone."
+                : "Be the first attendee to post! Scan the QR code or tap below to ask anonymously from your phone."}
           </p>
           <div className="empty-wall-actions">
             {search ? (
               <button type="button" className="btn ghost" onClick={() => setSearch("")}>
                 Clear Search
+              </button>
+            ) : activeTab === "featured" && rows.length > 0 ? (
+              <button type="button" className="btn ghost" onClick={() => setActiveTab("all")}>
+                View all live questions
               </button>
             ) : (
               <>
@@ -377,10 +395,10 @@ export default function Wall() {
 
       {/* Featured Spotlight Grid */}
       {featuredCards.length > 0 && (
-        <section className="wall-featured-section enter" aria-label="Featured Questions">
+        <section className="wall-featured-section enter" aria-label="Pinned spotlight questions">
           <div className="section-label">
-            <Sparkles size={16} className="text-gold" />
-            <span>Featured in Spotlight ({featuredCards.length})</span>
+            <Sparkles size={16} className="text-gold" aria-hidden="true" />
+            <span>Pinned to top · Spotlight ({featuredCards.length})</span>
           </div>
           <div className={`wall-featured ${isCompact ? "compact-layout" : ""}`}>
             {featuredCards.map((q, i) => (

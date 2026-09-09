@@ -766,16 +766,40 @@
     overflow-wrap: anywhere;
   }
 
-  /* Featured Spotlight Card */
+  /* Featured Spotlight Card - pinned to Wall top, gold-tinted glass */
   .card.featured,
-  .featured {
-    border-color: rgba(245, 158, 11, 0.55);
+  .admin-question-card.featured {
+    position: relative;
+    border-color: rgba(245, 158, 11, 0.65);
     background:
       linear-gradient(135deg, rgba(245, 158, 11, 0.16) 0%, rgba(255, 153, 0, 0.06) 50%, rgba(255, 255, 255, 0.02) 100%),
       var(--glass-bg-card);
     box-shadow:
-      0 16px 48px -8px rgba(245, 158, 11, 0.2),
-      0 0 0 1px rgba(245, 158, 11, 0.25),
+      0 16px 48px -8px rgba(245, 158, 11, 0.25),
+      0 0 0 1px rgba(245, 158, 11, 0.28),
+      var(--glass-highlight);
+  }
+
+  /* dhivagar-skill: added - gold top hairline marks pinned cards without a side strip */
+  .card.featured::before,
+  .admin-question-card.featured::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 18px;
+    right: 18px;
+    height: 2px;
+    border-radius: 999px;
+    background: linear-gradient(90deg, transparent, rgba(245, 158, 11, 0.9), transparent);
+    pointer-events: none;
+  }
+
+  .card.featured:focus-within,
+  .admin-question-card.featured:focus-within {
+    border-color: rgba(245, 158, 11, 0.9);
+    box-shadow:
+      0 16px 48px -8px rgba(245, 158, 11, 0.35),
+      0 0 0 3px rgba(245, 158, 11, 0.22),
       var(--glass-highlight);
   }
 
@@ -2219,6 +2243,20 @@
     flex-wrap: wrap;
     padding-top: 8px;
     border-top: 1px solid rgba(255, 255, 255, 0.06);
+  }
+
+  /* dhivagar-skill: added - gold active state for the Featured stat card */
+  .admin-stats-grid .stat-card.active:has(.text-gold) {
+    border-color: rgba(245, 158, 11, 0.65);
+    background: rgba(245, 158, 11, 0.1);
+  }
+
+  /* dhivagar-skill: added - 44px touch targets for moderator actions on mobile */
+  @media (max-width: 640px) {
+    .admin-actions-bar .btn.small {
+      min-height: 44px;
+      flex: 1 1 auto;
+    }
   }
 
   /* Admin Login View */

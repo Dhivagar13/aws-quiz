@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import type { CSSProperties, MouseEvent } from "react";
 import confetti from "canvas-confetti";
-import { ThumbsUp, Sparkles, Copy, Check, Clock, UserCheck } from "lucide-react";
+import { ThumbsUp, Pin, Copy, Check, Clock, UserCheck } from "lucide-react";
 import type { Question } from "../hooks/useQuestions";
 import { timeAgo } from "../lib/format";
 
@@ -124,16 +124,17 @@ export default function QuestionCard({ q, voted, onUpvote, compact, index = 0 }:
       ref={ref}
       className={cls}
       style={{ "--d": `${stagger}ms` } as CSSProperties}
-      aria-label={`Question from ${q.display_handle}`}
+      aria-label={`${isFeatured ? "Pinned spotlight question" : "Question"} from ${q.display_handle}`}
+      data-featured={isFeatured || undefined}
       onMouseMove={handleMove}
       onMouseLeave={handleLeave}
     >
       <div className="card-top">
         <div className="card-top-badges">
           {isFeatured && (
-            <span className="badge badge-featured">
-              <Sparkles size={13} className="badge-icon-spin" />
-              <span>Featured</span>
+            <span className="badge badge-featured" title="Pinned to top of Wall">
+              <Pin size={13} className="badge-icon-spin" aria-hidden="true" />
+              <span>Pinned to top</span>
             </span>
           )}
           {topic && <span className="badge badge-topic">{topic}</span>}
