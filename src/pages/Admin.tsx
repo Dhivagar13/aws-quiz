@@ -363,6 +363,23 @@ function AdminDeck({
   const featured = useMemo(() => rows.filter((q) => q.status === "featured"), [rows]);
   const rejected = useMemo(() => rows.filter((q) => q.status === "rejected"), [rows]);
 
+  const adminTabOrder: AdminTab[] = ["pending", "live", "featured", "rejected", "all"];
+
+  function handleAdminFilterKeyDown(e: React.KeyboardEvent) {
+    const idx = adminTabOrder.indexOf(activeTab);
+    let next: AdminTab | null = null;
+    if (e.key === "ArrowRight") next = adminTabOrder[(idx + 1) % adminTabOrder.length];
+    else if (e.key === "ArrowLeft") next = adminTabOrder[(idx - 1 + adminTabOrder.length) % adminTabOrder.length];
+    else if (e.key === "Home") next = adminTabOrder[0];
+    else if (e.key === "End") next = adminTabOrder[adminTabOrder.length - 1];
+    else return;
+    e.preventDefault();
+    setActiveTab(next);
+    requestAnimationFrame(() => {
+      document.querySelector<HTMLElement>(`[data-admin-tab="${next}"]`)?.focus();
+    });
+  }
+
   const displayedQuestions = useMemo(() => {
     let list: Question[] = [];
     if (activeTab === "pending") list = pending;
@@ -502,46 +519,86 @@ function AdminDeck({
 
       {/* Filter and Search Bar */}
       <div className="admin-filter-bar glass">
-        <div className="filter-tabs">
+        <div
+          className="filter-tabs"
+          role="tablist"
+          aria-label="Filter moderation queue"
+          onKeyDown={handleAdminFilterKeyDown}
+        >
           <button
             type="button"
+            data-admin-tab="pending"
+            id="admin-tab-pending"
             className={`filter-tab ${activeTab === "pending" ? "active" : ""}`}
             onClick={() => setActiveTab("pending")}
-            aria-pressed={activeTab === "pending"}
+            role="tab"
+            aria-selected={activeTab === "pending"}
+            aria-controls="admin-queue-panel"
+            aria-label={`Pending, ${pending.length} questions`}
+            tabIndex={activeTab === "pending" ? 0 : -1}
           >
-            Pending ({pending.length})
+            <span>Pending</span>
+            <span className="tab-count" aria-hidden="true">{pending.length}</span>
           </button>
           <button
             type="button"
+            data-admin-tab="live"
+            id="admin-tab-live"
             className={`filter-tab ${activeTab === "live" ? "active" : ""}`}
             onClick={() => setActiveTab("live")}
-            aria-pressed={activeTab === "live"}
+            role="tab"
+            aria-selected={activeTab === "live"}
+            aria-controls="admin-queue-panel"
+            aria-label={`Live, ${live.length} questions`}
+            tabIndex={activeTab === "live" ? 0 : -1}
           >
-            Live ({live.length})
+            <span>Live</span>
+            <span className="tab-count" aria-hidden="true">{live.length}</span>
           </button>
           <button
             type="button"
-            className={`filter-tab ${activeTab === "featured" ? "active" : ""}`}
+            data-admin-tab="featured"
+            id="admin-tab-featured"
+            className={`filter-tab featured-tab ${activeTab === "featured" ? "active" : ""}`}
             onClick={() => setActiveTab("featured")}
-            aria-pressed={activeTab === "featured"}
+            role="tab"
+            aria-selected={activeTab === "featured"}
+            aria-controls="admin-queue-panel"
+            aria-label={`Featured, ${featured.length} questions`}
+            tabIndex={activeTab === "featured" ? 0 : -1}
           >
-            Featured ({featured.length})
+            <span>Featured</span>
+            <span className="tab-count" aria-hidden="true">{featured.length}</span>
           </button>
           <button
             type="button"
+            data-admin-tab="rejected"
+            id="admin-tab-rejected"
             className={`filter-tab ${activeTab === "rejected" ? "active" : ""}`}
             onClick={() => setActiveTab("rejected")}
-            aria-pressed={activeTab === "rejected"}
+            role="tab"
+            aria-selected={activeTab === "rejected"}
+            aria-controls="admin-queue-panel"
+            aria-label={`Rejected, ${rejected.length} questions`}
+            tabIndex={activeTab === "rejected" ? 0 : -1}
           >
-            Rejected ({rejected.length})
+            <span>Rejected</span>
+            <span className="tab-count" aria-hidden="true">{rejected.length}</span>
           </button>
           <button
             type="button"
+            data-admin-tab="all"
+            id="admin-tab-all"
             className={`filter-tab ${activeTab === "all" ? "active" : ""}`}
             onClick={() => setActiveTab("all")}
-            aria-pressed={activeTab === "all"}
+            role="tab"
+            aria-selected={activeTab === "all"}
+            aria-controls="admin-queue-panel"
+            aria-label={`All, ${rows.length} questions`}
+            tabIndex={activeTab === "all" ? 0 : -1}
           >
-            All ({rows.length})
+            <span>All</span>
+            <span className="tab-count" aria-hidden="true">{rows.length}</span>
           </button>
         </div>
 
@@ -551,6 +608,7 @@ function AdminDeck({
             type="text"
             className="search-input"
             placeholder="Search questions in queue..."
+            aria-label="Search questions in queue"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
@@ -558,7 +616,7 @@ function AdminDeck({
       </div>
 
       {/* Queue List */}
-      <div className="admin-queue-list" aria-live="polite" aria-busy={busyId !== null}>
+      <div id="admin-queue-panel" className="admin-queue-list" role="tabpanel" aria-labelledby={`admin-tab-${activeTab}`} aria-live="polite" aria-busy={busyId !== null}>
         {loading && (
           <div className="notice enter">
             <RefreshCw size={16} className="spinner" />

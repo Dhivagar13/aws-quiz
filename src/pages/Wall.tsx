@@ -66,6 +66,23 @@ export default function Wall() {
     filterGlareRef.current.style.setProperty("--y", `${y}px`);
   }
 
+  const filterOrder: FilterTab[] = ["all", "top", "featured", "recent"];
+
+  function handleFilterKeyDown(e: React.KeyboardEvent) {
+    const idx = filterOrder.indexOf(activeTab);
+    let next: FilterTab | null = null;
+    if (e.key === "ArrowRight") next = filterOrder[(idx + 1) % filterOrder.length];
+    else if (e.key === "ArrowLeft") next = filterOrder[(idx - 1 + filterOrder.length) % filterOrder.length];
+    else if (e.key === "Home") next = filterOrder[0];
+    else if (e.key === "End") next = filterOrder[filterOrder.length - 1];
+    else return;
+    e.preventDefault();
+    setActiveTab(next);
+    requestAnimationFrame(() => {
+      filterTrackRef.current?.querySelector<HTMLElement>(`[data-tab="${next}"]`)?.focus();
+    });
+  }
+
   useEffect(() => {
     function handleFullscreenChange() {
       setIsFullscreen(Boolean(document.fullscreenElement));
@@ -247,12 +264,15 @@ export default function Wall() {
         </div>
 
         {/* Apple Liquid Glass Filter Track */}
-        <div
-          ref={filterTrackRef}
-          className="liquid-nav filter-nav-track"
-          onMouseMove={handleFilterGlare}
-          role="tablist"
-        >
+        <div className="filter-nav-scroll-wrapper">
+          <div
+            ref={filterTrackRef}
+            className="liquid-nav filter-nav-track"
+            onMouseMove={handleFilterGlare}
+            role="tablist"
+            aria-label="Filter questions"
+            onKeyDown={handleFilterKeyDown}
+          >
           <div className="liquid-glare-container">
             <div ref={filterGlareRef} className="liquid-glare" />
           </div>
@@ -262,21 +282,32 @@ export default function Wall() {
 
             <button
               type="button"
+              data-tab="all"
+              id="wall-tab-all"
               className={`filter-tab liquid-nav-btn ${activeTab === "all" ? "active" : ""}`}
               onClick={() => setActiveTab("all")}
               role="tab"
               aria-selected={activeTab === "all"}
+              aria-controls="wall-panel"
+              aria-label={`All, ${rows.length} questions`}
+              tabIndex={activeTab === "all" ? 0 : -1}
             >
               <div className="btn-content">
-                <span>All ({rows.length})</span>
+                <span>All</span>
+                <span className="tab-count" aria-hidden="true">{rows.length}</span>
               </div>
             </button>
             <button
               type="button"
+              data-tab="top"
+              id="wall-tab-top"
               className={`filter-tab liquid-nav-btn ${activeTab === "top" ? "active" : ""}`}
               onClick={() => setActiveTab("top")}
               role="tab"
               aria-selected={activeTab === "top"}
+              aria-controls="wall-panel"
+              aria-label="Top Voted, sorted by votes"
+              tabIndex={activeTab === "top" ? 0 : -1}
             >
               <div className="btn-content">
                 <Flame size={13} className="text-amber" />
@@ -285,22 +316,33 @@ export default function Wall() {
             </button>
             <button
               type="button"
-              className={`filter-tab liquid-nav-btn ${activeTab === "featured" ? "active" : ""}`}
+              data-tab="featured"
+              id="wall-tab-featured"
+              className={`filter-tab liquid-nav-btn featured-tab ${activeTab === "featured" ? "active" : ""}`}
               onClick={() => setActiveTab("featured")}
               role="tab"
               aria-selected={activeTab === "featured"}
+              aria-controls="wall-panel"
+              aria-label={`Featured, ${featuredCount} questions`}
+              tabIndex={activeTab === "featured" ? 0 : -1}
             >
               <div className="btn-content">
                 <Sparkles size={13} className="text-gold" />
-                <span>Featured ({featuredCount})</span>
+                <span>Featured</span>
+                <span className="tab-count" aria-hidden="true">{featuredCount}</span>
               </div>
             </button>
             <button
               type="button"
+              data-tab="recent"
+              id="wall-tab-recent"
               className={`filter-tab liquid-nav-btn ${activeTab === "recent" ? "active" : ""}`}
               onClick={() => setActiveTab("recent")}
               role="tab"
               aria-selected={activeTab === "recent"}
+              aria-controls="wall-panel"
+              aria-label="Recent, sorted by newest first"
+              tabIndex={activeTab === "recent" ? 0 : -1}
             >
               <div className="btn-content">
                 <Clock size={13} />
@@ -309,6 +351,7 @@ export default function Wall() {
             </button>
           </div>
         </div>
+      </div>
       </div>
 
       {lastSync && (
@@ -323,6 +366,7 @@ export default function Wall() {
         </div>
       )}
 
+      <div id="wall-panel" role="tabpanel" aria-labelledby={`wall-tab-${activeTab}`} className="wall-panel">
       {loading && rows.length === 0 && (
         <div className="notice enter">
           <RefreshCw size={16} className="spinner spin-refresh" />
@@ -438,6 +482,7 @@ export default function Wall() {
           </div>
         </section>
       )}
+      </div>
     </div>
   );
 }
