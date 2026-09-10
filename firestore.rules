@@ -60,11 +60,16 @@ service cloud.firestore {
 
       allow delete: if isAdmin();
 
-      // votes subcollection: dedup only, no public read.
+      // votes subcollection: dedup only, no public enumeration.
+      // - get: admin OR anyone on live parents (lets anon tx.get own vote for dedup).
+      // - list: admins only (preserves voter anonymity).
       // - create: anyone may write one vote per device on live parents, doc-ID = voterHash.
-      // - read/update/delete: admins only.
+      // - update/delete: admins only.
       match /votes/{voterHash} {
-        allow get, list: if isAdmin();
+        allow get: if isAdmin()
+          || (exists(/databases/$(database)/documents/questions/$(qid))
+            && isLiveQuestion(get(/databases/$(database)/documents/questions/$(qid)).data));
+        allow list: if isAdmin();
         allow create: if exists(/databases/$(database)/documents/questions/$(qid))
           && isLiveQuestion(get(/databases/$(database)/documents/questions/$(qid)).data)
           && !exists(/databases/$(database)/documents/questions/$(qid)/votes/$(voterHash))

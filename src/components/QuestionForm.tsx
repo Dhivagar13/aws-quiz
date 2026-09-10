@@ -47,7 +47,7 @@ export default function QuestionForm({ onSubmit }: Props) {
     }
     const rate = checkPostRate();
     if (!rate.allowed) {
-      setError(`Slow down. Try again in ${rate.retryAfterSec}s. Max 3 posts per minute.`);
+      setError(`Slow down. Try again in ${rate.retryAfterSec}s. Max 10 posts per 5 minutes.`);
       return;
     }
 

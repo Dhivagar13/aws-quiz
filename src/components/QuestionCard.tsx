@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import type { CSSProperties, MouseEvent } from "react";
 import confetti from "canvas-confetti";
-import { ThumbsUp, Sparkles, Copy, Check, Clock, UserCheck } from "lucide-react";
+import { ThumbsUp, Pin, Copy, Check, Clock, UserCheck, Maximize2 } from "lucide-react";
 import type { Question } from "../hooks/useQuestions";
 import { timeAgo } from "../lib/format";
 
@@ -11,6 +11,7 @@ interface Props {
   onUpvote: (id: string) => void;
   compact?: boolean;
   index?: number;
+  onOpen?: () => void;
 }
 
 // Automatically detect prominent cloud topics from question text
@@ -40,7 +41,7 @@ function detectTopic(text: string): string | null {
   return null;
 }
 
-export default function QuestionCard({ q, voted, onUpvote, compact, index = 0 }: Props) {
+export default function QuestionCard({ q, voted, onUpvote, compact, index = 0, onOpen }: Props) {
   const ref = useRef<HTMLElement | null>(null);
   const [copied, setCopied] = useState(false);
   const [isBumping, setIsBumping] = useState(false);
@@ -78,6 +79,7 @@ export default function QuestionCard({ q, voted, onUpvote, compact, index = 0 }:
   }
 
   function handleVoteClick(e: MouseEvent<HTMLButtonElement>) {
+    e.stopPropagation();
     if (voted) return;
 
     // Gentle tactile haptic feedback for mobile
@@ -116,24 +118,33 @@ export default function QuestionCard({ q, voted, onUpvote, compact, index = 0 }:
   const stagger = Math.min(Math.max(0, index), 8) * 50;
   const isFeatured = q.status === "featured";
   const cls = isFeatured
-    ? `card glass-card tilt enter featured ${compact ? "compact" : ""}`
-    : `card glass-card tilt enter ${compact ? "compact" : ""}`;
+    ? `card glass-card tilt enter featured ${compact ? "compact" : ""} ${onOpen ? "openable" : ""}`
+    : `card glass-card tilt enter ${compact ? "compact" : ""} ${onOpen ? "openable" : ""}`;
+
+  function handleCardActivate(e: MouseEvent<HTMLElement>) {
+    if (!onOpen) return;
+    const target = e.target as HTMLElement | null;
+    if (target?.closest?.("button, a, input, textarea, select")) return;
+    onOpen();
+  }
 
   return (
     <article
       ref={ref}
       className={cls}
       style={{ "--d": `${stagger}ms` } as CSSProperties}
-      aria-label={`Question from ${q.display_handle}`}
+      aria-label={`${isFeatured ? "Pinned spotlight question" : "Question"} from ${q.display_handle}`}
+      data-featured={isFeatured || undefined}
       onMouseMove={handleMove}
       onMouseLeave={handleLeave}
+      onClick={handleCardActivate}
     >
       <div className="card-top">
         <div className="card-top-badges">
           {isFeatured && (
-            <span className="badge badge-featured">
-              <Sparkles size={13} className="badge-icon-spin" />
-              <span>Featured</span>
+            <span className="badge badge-featured" title="Pinned to top of Wall">
+              <Pin size={13} className="badge-icon-spin" aria-hidden="true" />
+              <span>Pinned to top</span>
             </span>
           )}
           {topic && <span className="badge badge-topic">{topic}</span>}
@@ -151,9 +162,18 @@ export default function QuestionCard({ q, voted, onUpvote, compact, index = 0 }:
         </div>
       </div>
 
-      <div className="card-body">
-        {q.body}
-      </div>
+      {onOpen ? (
+        <button
+          type="button"
+          className="card-open-btn"
+          onClick={onOpen}
+          aria-label={`Open fullscreen view of question from ${q.display_handle}`}
+        >
+          {q.body}
+        </button>
+      ) : (
+        <div className="card-body">{q.body}</div>
+      )}
 
       <div className="card-foot">
         <button
@@ -169,6 +189,21 @@ export default function QuestionCard({ q, voted, onUpvote, compact, index = 0 }:
         </button>
 
         <div className="card-actions">
+          {onOpen && (
+            <button
+              type="button"
+              className="icon-action-btn"
+              onClick={(e) => {
+                e.stopPropagation();
+                onOpen();
+              }}
+              title="Open fullscreen viewer"
+              aria-label={`Expand question from ${q.display_handle} to fullscreen`}
+            >
+              <Maximize2 size={14} />
+              <span className="action-hint">Expand</span>
+            </button>
+          )}
           <button
             type="button"
             className="icon-action-btn"

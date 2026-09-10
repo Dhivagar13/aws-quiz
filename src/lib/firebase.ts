@@ -1,6 +1,6 @@
 import { getApp, getApps, initializeApp, type FirebaseApp } from "firebase/app";
-import { getAuth, type Auth } from "firebase/auth";
-import { initializeFirestore, type Firestore } from "firebase/firestore";
+import { getFirestore, initializeFirestore, type Firestore } from "firebase/firestore";
+import type { Auth } from "firebase/auth";
 
 const apiKey = import.meta.env.VITE_FIREBASE_API_KEY?.trim() ?? "";
 const authDomain = import.meta.env.VITE_FIREBASE_AUTH_DOMAIN?.trim() ?? "";
@@ -33,7 +33,6 @@ export const isFirebaseConfigured =
 
 let app: FirebaseApp | null = null;
 let dbInstance: Firestore | null = null;
-let authInstance: Auth | null = null;
 
 if (isFirebaseConfigured) {
   const existing = getApps().length > 0 ? getApp() : null;
@@ -47,16 +46,40 @@ if (isFirebaseConfigured) {
       messagingSenderId: messagingSenderId || undefined,
       appId,
     });
-  const forceLongPoll = import.meta.env.VITE_FIRESTORE_LONG_POLL === "force";
-  dbInstance = forceLongPoll
-    ? initializeFirestore(app, { experimentalForceLongPolling: true })
-    : initializeFirestore(app, {});
-  authInstance = getAuth(app);
+  const rawLongPoll = String(import.meta.env.VITE_FIRESTORE_LONG_POLL ?? "").toLowerCase().trim();
+  const forceLongPoll = ["force", "true", "1"].includes(rawLongPoll);
+  if (import.meta.env.DEV && forceLongPoll) {
+    console.debug("[firestore] long-polling enabled via VITE_FIRESTORE_LONG_POLL");
+  }
+  try {
+    dbInstance = forceLongPoll
+      ? initializeFirestore(app, { experimentalForceLongPolling: true })
+      : initializeFirestore(app, {});
+  } catch {
+    // HMR guard: Firestore already initialized in this session, reuse it.
+    try {
+      dbInstance = getFirestore(app);
+    } catch {
+      dbInstance = null;
+    }
+  }
 }
 
 export const firebaseApp: FirebaseApp | null = app;
 export const db: Firestore | null = dbInstance;
-export const auth: Auth | null = authInstance;
+
+/**
+ * Lazy Admin-only Auth loader. Keeps `firebase/auth` (and its
+ * Identity Toolkit getProjectConfig / iframe.js fetch) out of the
+ * `/` and `/wall` bundles. Call only from Admin route.
+ */
+export async function loadAdminAuth(): Promise<Auth> {
+  if (!isFirebaseConfigured || !app) {
+    throw new Error("Live setup required: Firebase env is missing.");
+  }
+  const { getAuth } = await import("firebase/auth");
+  return getAuth(app);
+}
 
 const parsedPoll = Number(import.meta.env.VITE_POLL_INTERVAL_MS ?? "5000");
 export const POLL_INTERVAL_MS =

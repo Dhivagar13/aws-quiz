@@ -3,7 +3,6 @@ import {
   addDoc,
   collection,
   doc,
-  getDoc,
   getDocs,
   increment,
   limit,
@@ -16,7 +15,7 @@ import {
   where,
   type DocumentData,
 } from "firebase/firestore";
-import { POLL_INTERVAL_MS, db, isFirebaseConfigured } from "../lib/firebase";
+import { db, isFirebaseConfigured } from "../lib/firebase";
 import {
   generateHandle,
   getOrCreateVoterHash,
@@ -77,6 +76,9 @@ export function sortWall(rows: Question[]): Question[] {
 }
 
 function parseFirestoreError(e: unknown): string {
+  if (typeof navigator !== "undefined" && !navigator.onLine) {
+    return "You are offline. Check your connection, then use Refresh to retry.";
+  }
   if (!(e instanceof Error)) return "Failed to load questions.";
   const msg = e.message;
   if (msg.includes("PERMISSION_DENIED") || msg.includes("permission-denied")) {
@@ -94,6 +96,33 @@ function parseFirestoreError(e: unknown): string {
   return msg;
 }
 
+const FETCH_TIMEOUT_MS = 12000;
+const RETRY_DELAYS_MS = [2000, 4000, 8000];
+
+function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
+  let timer = 0;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = window.setTimeout(() => reject(new Error(message)), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => window.clearTimeout(timer));
+}
+
+function isRetryable(e: unknown): boolean {
+  if (!(e instanceof Error)) return false;
+  const msg = e.message.toLowerCase();
+  return (
+    msg.includes("timed out") ||
+    msg.includes("timeout") ||
+    msg.includes("unavailable") ||
+    msg.includes("network") ||
+    msg.includes("failed to fetch")
+  );
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
 export function useQuestions(scope: Scope) {
   const [rows, setRows] = useState<Question[]>([]);
   const [loading, setLoading] = useState(true);
@@ -109,6 +138,11 @@ export function useQuestions(scope: Scope) {
       setLastSync(null);
       return;
     }
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      setLoading(false);
+      setError("You are offline. Check your connection, then use Refresh to retry.");
+      return;
+    }
     try {
       setError(null);
       const base = collection(db, "questions");
@@ -117,15 +151,32 @@ export function useQuestions(scope: Scope) {
           ? query(base, where("status", "in", ["approved", "featured"]), orderBy("created_at", "desc"), limit(200))
           : query(base, orderBy("created_at", "desc"), limit(200));
 
-      const snapPromise = getDocs(q);
-      const timeoutPromise = new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error("Firestore connection timed out")), 3500)
-      );
-
-      const snap = await Promise.race([snapPromise, timeoutPromise]);
-      const list = snap.docs.map((d) => toQuestion(d.id, d.data()));
-      setRows(scope === "wall" ? sortWall(list) : list);
-      setLastSync(new Date().toISOString());
+      for (let attempt = 0; ; attempt += 1) {
+        try {
+          const snap = await withTimeout(getDocs(q), FETCH_TIMEOUT_MS, "Firestore connection timed out");
+          const list = snap.docs.map((d) => toQuestion(d.id, d.data()));
+          setRows(scope === "wall" ? sortWall(list) : list);
+          setLastSync(new Date().toISOString());
+          setError(null);
+          return;
+        } catch (e) {
+          if (typeof navigator !== "undefined" && !navigator.onLine) {
+            setError("You are offline. Check your connection, then use Refresh to retry.");
+            return;
+          }
+          if (isRetryable(e) && attempt < RETRY_DELAYS_MS.length) {
+            const waitMs = RETRY_DELAYS_MS[attempt];
+            setError(`${parseFirestoreError(e)} Retrying(${attempt + 1}) in ${waitMs / 1000}s...`);
+            if (import.meta.env.DEV) {
+              console.debug(`[questions] fetch retry ${attempt + 1} after ${waitMs}ms`);
+            }
+            await delay(waitMs);
+            continue;
+          }
+          setError(parseFirestoreError(e));
+          return;
+        }
+      }
     } catch (e) {
       setError(parseFirestoreError(e));
     } finally {
@@ -137,20 +188,20 @@ export function useQuestions(scope: Scope) {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void fetchRows();
 
-    // Safety timeout ensures loading spinner never stays indefinitely
+    // Safety timeout aligned with the 12s one-shot so the spinner
+    // never sticks if both getDocs and the snapshot hang.
     const safetyTimer = window.setTimeout(() => {
       setLoading(false);
-    }, 3500);
-
-    const timer = window.setInterval(() => {
-      void fetchRows();
-    }, POLL_INTERVAL_MS);
+    }, FETCH_TIMEOUT_MS + 1000);
 
     if (!isFirebaseConfigured || !db) {
       window.clearTimeout(safetyTimer);
-      return () => window.clearInterval(timer);
+      return;
     }
 
+    // Live updates come from onSnapshot only. The old 5s interval poll
+    // is removed to dedupe traffic against the snapshot; manual Refresh
+    // (fetchRows) remains for explicit retries.
     const base = collection(db, "questions");
     const liveQuery =
       scope === "wall"
@@ -176,7 +227,6 @@ export function useQuestions(scope: Scope) {
 
     return () => {
       window.clearTimeout(safetyTimer);
-      window.clearInterval(timer);
       unsub();
     };
   }, [fetchRows, scope]);
@@ -225,15 +275,10 @@ export function useQuestions(scope: Scope) {
       const questionRef = doc(firestore, "questions", id);
       const voteRef = doc(firestore, "questions", id, "votes", voterHash);
 
-      // Dedup is triple-guarded: localStorage set + vote doc-ID existence
+      // Dedup is triple-guarded: localStorage set + tx vote doc-ID existence
       // check + rules !exists() guard. Count moves exactly +1 via increment.
-      const existing = await getDoc(voteRef);
-      if (existing.exists()) {
-        markVoted(id);
-        setVoted(getVotedIds());
-        throw new Error("You already upvoted this question on this device.");
-      }
-
+      // No outer getDoc pre-read: anon get on votes is allowed only inside
+      // the live-parent tx path, and the pre-read caused false deny noise.
       try {
         await runTransaction(firestore, async (tx) => {
           const qSnap = await tx.get(questionRef);
@@ -249,9 +294,21 @@ export function useQuestions(scope: Scope) {
         });
       } catch (e) {
         const msg = e instanceof Error ? e.message : "Upvote failed.";
-        if (msg.toLowerCase().includes("already upvoted")) {
+        const lower = msg.toLowerCase();
+        if (lower.includes("already upvoted")) {
           markVoted(id);
           setVoted(getVotedIds());
+        } else if (
+          lower.includes("permission-denied") ||
+          lower.includes("permission_denied") ||
+          lower.includes("already-exists") ||
+          lower.includes("already_exists") ||
+          lower.includes("already exists")
+        ) {
+          // Rules create guard !exists() rejects duplicates as denied.
+          markVoted(id);
+          setVoted(getVotedIds());
+          throw new Error("You already upvoted this question on this device.");
         }
         throw e instanceof Error ? e : new Error(msg);
       }

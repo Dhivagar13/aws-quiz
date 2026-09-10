@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 import { useOutletContext, Link } from "react-router-dom";
 import QuestionCard from "../components/QuestionCard";
+import QuestionViewer from "../components/QuestionViewer";
 import { useQuestions } from "../hooks/useQuestions";
 import { POLL_INTERVAL_MS } from "../lib/firebase";
 import {
@@ -36,6 +37,7 @@ export default function Wall() {
   const [isCompact, setIsCompact] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [viewerId, setViewerId] = useState<string | null>(null);
 
   const filterTrackRef = useRef<HTMLDivElement | null>(null);
   const filterPillRef = useRef<HTMLDivElement | null>(null);
@@ -64,6 +66,23 @@ export default function Wall() {
     const y = e.clientY - rect.top;
     filterGlareRef.current.style.setProperty("--x", `${x}px`);
     filterGlareRef.current.style.setProperty("--y", `${y}px`);
+  }
+
+  const filterOrder: FilterTab[] = ["all", "top", "featured", "recent"];
+
+  function handleFilterKeyDown(e: React.KeyboardEvent) {
+    const idx = filterOrder.indexOf(activeTab);
+    let next: FilterTab | null = null;
+    if (e.key === "ArrowRight") next = filterOrder[(idx + 1) % filterOrder.length];
+    else if (e.key === "ArrowLeft") next = filterOrder[(idx - 1 + filterOrder.length) % filterOrder.length];
+    else if (e.key === "Home") next = filterOrder[0];
+    else if (e.key === "End") next = filterOrder[filterOrder.length - 1];
+    else return;
+    e.preventDefault();
+    setActiveTab(next);
+    requestAnimationFrame(() => {
+      filterTrackRef.current?.querySelector<HTMLElement>(`[data-tab="${next}"]`)?.focus();
+    });
   }
 
   useEffect(() => {
@@ -136,6 +155,20 @@ export default function Wall() {
 
   const featuredCards = filteredRows.filter((q) => q.status === "featured");
   const regularCards = activeTab === "featured" ? [] : filteredRows.filter((q) => q.status !== "featured");
+
+  // Viewer follows visual order (spotlight first, then community) so
+  // prev/next matches what the audience sees on the Wall.
+  const viewerList = useMemo(
+    () => [...featuredCards, ...regularCards],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [filteredRows, activeTab],
+  );
+  const viewerIndex = viewerId ? viewerList.findIndex((q) => q.id === viewerId) : -1;
+
+  // If the open question is filtered out or removed live, close quietly.
+  useEffect(() => {
+    if (viewerId && viewerIndex === -1) setViewerId(null);
+  }, [viewerId, viewerIndex]);
 
   return (
     <div className={`wall-page ${isFullscreen ? "projector-mode" : ""}`}>
@@ -247,12 +280,15 @@ export default function Wall() {
         </div>
 
         {/* Apple Liquid Glass Filter Track */}
-        <div
-          ref={filterTrackRef}
-          className="liquid-nav filter-nav-track"
-          onMouseMove={handleFilterGlare}
-          role="tablist"
-        >
+        <div className="filter-nav-scroll-wrapper">
+          <div
+            ref={filterTrackRef}
+            className="liquid-nav filter-nav-track"
+            onMouseMove={handleFilterGlare}
+            role="tablist"
+            aria-label="Filter questions"
+            onKeyDown={handleFilterKeyDown}
+          >
           <div className="liquid-glare-container">
             <div ref={filterGlareRef} className="liquid-glare" />
           </div>
@@ -262,21 +298,32 @@ export default function Wall() {
 
             <button
               type="button"
+              data-tab="all"
+              id="wall-tab-all"
               className={`filter-tab liquid-nav-btn ${activeTab === "all" ? "active" : ""}`}
               onClick={() => setActiveTab("all")}
               role="tab"
               aria-selected={activeTab === "all"}
+              aria-controls="wall-panel"
+              aria-label={`All, ${rows.length} questions`}
+              tabIndex={activeTab === "all" ? 0 : -1}
             >
               <div className="btn-content">
-                <span>All ({rows.length})</span>
+                <span>All</span>
+                <span className="tab-count" aria-hidden="true">{rows.length}</span>
               </div>
             </button>
             <button
               type="button"
+              data-tab="top"
+              id="wall-tab-top"
               className={`filter-tab liquid-nav-btn ${activeTab === "top" ? "active" : ""}`}
               onClick={() => setActiveTab("top")}
               role="tab"
               aria-selected={activeTab === "top"}
+              aria-controls="wall-panel"
+              aria-label="Top Voted, sorted by votes"
+              tabIndex={activeTab === "top" ? 0 : -1}
             >
               <div className="btn-content">
                 <Flame size={13} className="text-amber" />
@@ -285,22 +332,33 @@ export default function Wall() {
             </button>
             <button
               type="button"
-              className={`filter-tab liquid-nav-btn ${activeTab === "featured" ? "active" : ""}`}
+              data-tab="featured"
+              id="wall-tab-featured"
+              className={`filter-tab liquid-nav-btn featured-tab ${activeTab === "featured" ? "active" : ""}`}
               onClick={() => setActiveTab("featured")}
               role="tab"
               aria-selected={activeTab === "featured"}
+              aria-controls="wall-panel"
+              aria-label={`Featured, ${featuredCount} questions`}
+              tabIndex={activeTab === "featured" ? 0 : -1}
             >
               <div className="btn-content">
                 <Sparkles size={13} className="text-gold" />
-                <span>Featured ({featuredCount})</span>
+                <span>Featured</span>
+                <span className="tab-count" aria-hidden="true">{featuredCount}</span>
               </div>
             </button>
             <button
               type="button"
+              data-tab="recent"
+              id="wall-tab-recent"
               className={`filter-tab liquid-nav-btn ${activeTab === "recent" ? "active" : ""}`}
               onClick={() => setActiveTab("recent")}
               role="tab"
               aria-selected={activeTab === "recent"}
+              aria-controls="wall-panel"
+              aria-label="Recent, sorted by newest first"
+              tabIndex={activeTab === "recent" ? 0 : -1}
             >
               <div className="btn-content">
                 <Clock size={13} />
@@ -309,6 +367,7 @@ export default function Wall() {
             </button>
           </div>
         </div>
+      </div>
       </div>
 
       {lastSync && (
@@ -323,6 +382,7 @@ export default function Wall() {
         </div>
       )}
 
+      <div id="wall-panel" role="tabpanel" aria-labelledby={`wall-tab-${activeTab}`} className="wall-panel">
       {loading && rows.length === 0 && (
         <div className="notice enter">
           <RefreshCw size={16} className="spinner spin-refresh" />
@@ -346,18 +406,36 @@ export default function Wall() {
       {!loading && filteredRows.length === 0 && (
         <div className="panel glass empty-wall-panel enter">
           <div className="empty-wall-icon">
-            <MessageSquare size={36} className="text-amber" />
+            {activeTab === "featured" && !search ? (
+              <Sparkles size={36} className="text-gold" aria-hidden="true" />
+            ) : (
+              <MessageSquare size={36} className="text-amber" aria-hidden="true" />
+            )}
           </div>
-          <h2>{search ? "No matching questions found" : "No approved questions yet"}</h2>
+          <h2>
+            {search
+              ? "No matching questions found"
+              : activeTab === "featured"
+                ? "Nothing pinned to the spotlight yet"
+                : "No approved questions yet"}
+          </h2>
           <p className="lede">
             {search
               ? "Try searching for a different keyword, or clear your search."
-              : "Be the first attendee to post! Scan the QR code or tap below to ask anonymously from your phone."}
+              : activeTab === "featured"
+                ? rows.length > 0
+                  ? "A moderator has not pinned anything yet. Browse all live questions while you wait."
+                  : "Be the first attendee to post! Scan the QR code or tap below to ask anonymously from your phone."
+                : "Be the first attendee to post! Scan the QR code or tap below to ask anonymously from your phone."}
           </p>
           <div className="empty-wall-actions">
             {search ? (
               <button type="button" className="btn ghost" onClick={() => setSearch("")}>
                 Clear Search
+              </button>
+            ) : activeTab === "featured" && rows.length > 0 ? (
+              <button type="button" className="btn ghost" onClick={() => setActiveTab("all")}>
+                View all live questions
               </button>
             ) : (
               <>
@@ -377,10 +455,10 @@ export default function Wall() {
 
       {/* Featured Spotlight Grid */}
       {featuredCards.length > 0 && (
-        <section className="wall-featured-section enter" aria-label="Featured Questions">
+        <section className="wall-featured-section enter" aria-label="Pinned spotlight questions">
           <div className="section-label">
-            <Sparkles size={16} className="text-gold" />
-            <span>Featured in Spotlight ({featuredCards.length})</span>
+            <Sparkles size={16} className="text-gold" aria-hidden="true" />
+            <span>Pinned to top · Spotlight ({featuredCards.length})</span>
           </div>
           <div className={`wall-featured ${isCompact ? "compact-layout" : ""}`}>
             {featuredCards.map((q, i) => (
@@ -391,6 +469,7 @@ export default function Wall() {
                 onUpvote={(id) => void handleUpvote(id)}
                 compact={isCompact}
                 index={i}
+                onOpen={() => setViewerId(q.id)}
               />
             ))}
           </div>
@@ -415,10 +494,26 @@ export default function Wall() {
                 onUpvote={(id) => void handleUpvote(id)}
                 compact={isCompact}
                 index={i + featuredCards.length}
+                onOpen={() => setViewerId(q.id)}
               />
             ))}
           </div>
         </section>
+      )}
+      </div>
+
+      {viewerId && viewerIndex >= 0 && (
+        <QuestionViewer
+          questions={viewerList}
+          index={viewerIndex}
+          votedIds={voted}
+          onUpvote={(id) => void handleUpvote(id)}
+          onIndexChange={(next) => {
+            const target = viewerList[next];
+            if (target) setViewerId(target.id);
+          }}
+          onClose={() => setViewerId(null)}
+        />
       )}
     </div>
   );
