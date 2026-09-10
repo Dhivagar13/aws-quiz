@@ -29,6 +29,16 @@ export default function AmbientBackground({ density = 1, forceReducedMotion }: A
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(50, width / height, 0.01, 900);
     camera.position.set(10, 6, 68);
+    // [inferred] Manual camera auto-orbit base + gentle drift amplitudes.
+    // No OrbitControls: canvas stays pointer-transparent so UI clicks pass
+    // through. Drift uses frozen time (st) so reduced-motion pauses camera
+    // and group together.
+    const CAM_BASE = new THREE.Vector3(10, 6, 68);
+    const CAM_DRIFT_SPEED = 0.07;
+    const CAM_DRIFT_X = 5.0;
+    const CAM_DRIFT_Y = 1.4;
+    const CAM_DRIFT_Z = 3.0;
+    camera.lookAt(0, 0, 0);
 
     let renderer: THREE.WebGLRenderer;
     try {
@@ -430,10 +440,17 @@ export default function AmbientBackground({ density = 1, forceReducedMotion }: A
 
     function animate() {
       if (disposed) return;
-      animId = requestAnimationFrame(animate);
+      // Schedule first so a render throw never halts the loop; fallback to
+      // setTimeout when rAF is unavailable (projector kiosk browsers).
+      try {
+        animId = requestAnimationFrame(animate);
+      } catch {
+        animId = window.setTimeout(() => animate(), 16) as unknown as number;
+      }
       try {
         const t = clock.getElapsedTime();
         // Freeze simulated time when reduced motion is requested; fade still progresses.
+        // When motion is allowed, st === t so group + camera advance every frame.
         const st = prefersReducedMotion ? 0 : t;
         const fade = Math.min(1.0, t / 3.0);
 
@@ -442,10 +459,20 @@ export default function AmbientBackground({ density = 1, forceReducedMotion }: A
           mat.uniforms.u_fadeIn.value = fade;
         }
 
-        // Attractor 3D rotation
+        // Attractor 3D rotation (continuous auto-spin; st advances when motion allowed)
         rotGroup.rotation.y = st * 0.072 + mouseX * 0.15;
         rotGroup.rotation.x = Math.sin(st * 0.053) * 0.4 + 0.28 + mouseY * 0.12;
         rotGroup.rotation.z = Math.sin(st * 0.039) * 0.17;
+
+        // [inferred] Gentle manual camera auto-orbit (OrbitControls-free).
+        // Keeps canvas click-through; st-frozen under reduced-motion.
+        const driftA = st * CAM_DRIFT_SPEED;
+        camera.position.set(
+          CAM_BASE.x + Math.sin(driftA) * CAM_DRIFT_X + mouseX * 1.5,
+          CAM_BASE.y + Math.sin(driftA * 0.8) * CAM_DRIFT_Y - mouseY * 1.0,
+          CAM_BASE.z + Math.cos(driftA) * CAM_DRIFT_Z
+        );
+        camera.lookAt(0, 0, 0);
 
         // Spinning circles rotation
         circleGroup.rotation.y = st * 0.25;
@@ -482,7 +509,16 @@ export default function AmbientBackground({ density = 1, forceReducedMotion }: A
 
     return () => {
       disposed = true;
-      cancelAnimationFrame(animId);
+      try {
+        cancelAnimationFrame(animId);
+      } catch {
+        // Best-effort; fall through to clearTimeout for setTimeout fallback ids.
+      }
+      try {
+        window.clearTimeout(animId);
+      } catch {
+        // Best-effort.
+      }
       window.removeEventListener("pointermove", handlePointerMove);
       window.removeEventListener("resize", handleResize);
       try {
