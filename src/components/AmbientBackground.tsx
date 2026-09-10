@@ -374,46 +374,80 @@ export default function AmbientBackground() {
 
     const clock = new THREE.Clock();
     // [inferred] Reduced-motion: freeze all orbital motion together so no
-    // single ring appears stuck while others move. Still renders one frame.
-    const prefersReducedMotion =
-      typeof window !== "undefined" &&
-      typeof window.matchMedia === "function" &&
-      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    // single ring appears stuck while others move. Still renders + fades.
+    // Guarded + live-synced so WebGL and CSS pause together.
+    function getReducedMotion(): boolean {
+      try {
+        if (typeof window === "undefined" || typeof window.matchMedia !== "function") return false;
+        return window.matchMedia("(prefers-reduced-motion: reduce)").matches === true;
+      } catch {
+        return false;
+      }
+    }
+    let prefersReducedMotion = getReducedMotion();
+    let reducedMq: MediaQueryList | null = null;
+    const onReducedMotionChange = (e: MediaQueryListEvent) => {
+      prefersReducedMotion = e.matches === true;
+    };
+    try {
+      reducedMq = window.matchMedia("(prefers-reduced-motion: reduce)");
+      if (typeof reducedMq.addEventListener === "function") {
+        reducedMq.addEventListener("change", onReducedMotionChange);
+      } else {
+        (reducedMq as unknown as { addListener?: (cb: (e: MediaQueryListEvent) => void) => void }).addListener?.(
+          onReducedMotionChange
+        );
+      }
+    } catch {
+      reducedMq = null;
+    }
 
     function animate() {
       animId = requestAnimationFrame(animate);
-      const t = clock.getElapsedTime();
-      // Freeze simulated time when reduced motion is requested; fade still progresses.
-      const st = prefersReducedMotion ? 0 : t;
-      const fade = Math.min(1.0, t / 3.0);
+      try {
+        const t = clock.getElapsedTime();
+        // Freeze simulated time when reduced motion is requested; fade still progresses.
+        const st = prefersReducedMotion ? 0 : t;
+        const fade = Math.min(1.0, t / 3.0);
 
-      for (const mat of allMats) {
-        mat.uniforms.u_time.value = st;
-        mat.uniforms.u_fadeIn.value = fade;
-      }
+        for (const mat of allMats) {
+          mat.uniforms.u_time.value = st;
+          mat.uniforms.u_fadeIn.value = fade;
+        }
 
-      // Attractor 3D rotation
-      rotGroup.rotation.y = st * 0.072 + mouseX * 0.15;
-      rotGroup.rotation.x = Math.sin(st * 0.053) * 0.4 + 0.28 + mouseY * 0.12;
-      rotGroup.rotation.z = Math.sin(st * 0.039) * 0.17;
+        // Attractor 3D rotation
+        rotGroup.rotation.y = st * 0.072 + mouseX * 0.15;
+        rotGroup.rotation.x = Math.sin(st * 0.053) * 0.4 + 0.28 + mouseY * 0.12;
+        rotGroup.rotation.z = Math.sin(st * 0.039) * 0.17;
 
-      // Spinning circles rotation
-      circleGroup.rotation.y = st * 0.25;
-      circleGroup.rotation.z = Math.sin(st * 0.15) * 0.25;
-      // Each ring gets its own update so none is static relative to the group.
-      // Torus is rotationally symmetric, so spin on Z plus a gentle tilt
-      // wobble makes its motion visible via precession. Points counter-rotate
-      // against the group for depth. Ring keeps its retrograde spin.
-      torusMesh.rotation.z = st * 0.3;
-      torusMesh.rotation.y = Math.sin(st * 0.2) * 0.15;
-      ringMesh.rotation.z = -st * 0.45;
-      ringMesh.rotation.x = Math.PI / 2 + Math.sin(st * 0.18) * 0.12;
-      circlePointsMesh.rotation.y = -st * 0.2;
+        // Spinning circles rotation
+        circleGroup.rotation.y = st * 0.25;
+        circleGroup.rotation.z = Math.sin(st * 0.15) * 0.25;
+        // Each ring keeps its own opposing delta on a VISIBLE axis.
+        // Torus/Ring are rotationally symmetric about local Z, so a Z spin
+        // is invisible; continuous spin lives on Y (tumbling) with tilt
+        // wobble on X. Points counter-rotate against the group for depth.
+        torusMesh.rotation.y = st * 0.3;
+        torusMesh.rotation.x = Math.PI / 2 + Math.sin(st * 0.2) * 0.15;
+        ringMesh.rotation.y = -st * 0.45;
+        ringMesh.rotation.x = Math.PI / 2 + Math.sin(st * 0.18) * 0.12;
+        circlePointsMesh.rotation.y = -st * 0.2;
 
-      if (composer) {
-        composer.render();
-      } else {
-        renderer.render(scene, camera);
+        if (composer) {
+          try {
+            composer.render();
+          } catch {
+            renderer.render(scene, camera);
+          }
+        } else {
+          renderer.render(scene, camera);
+        }
+      } catch {
+        try {
+          renderer.render(scene, camera);
+        } catch {
+          // Keep loop alive; next frame already scheduled.
+        }
       }
     }
 
@@ -423,6 +457,19 @@ export default function AmbientBackground() {
       cancelAnimationFrame(animId);
       window.removeEventListener("pointermove", handlePointerMove);
       window.removeEventListener("resize", handleResize);
+      try {
+        if (reducedMq) {
+          if (typeof reducedMq.removeEventListener === "function") {
+            reducedMq.removeEventListener("change", onReducedMotionChange);
+          } else {
+            (reducedMq as unknown as { removeListener?: (cb: (e: MediaQueryListEvent) => void) => void }).removeListener?.(
+              onReducedMotionChange
+            );
+          }
+        }
+      } catch {
+        // Listener cleanup is best-effort.
+      }
       if (composer) composer.dispose();
       renderer.dispose();
       torusGeo.dispose();
