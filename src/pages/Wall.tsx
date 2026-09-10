@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 import { useOutletContext, Link } from "react-router-dom";
 import QuestionCard from "../components/QuestionCard";
+import QuestionViewer from "../components/QuestionViewer";
 import { useQuestions } from "../hooks/useQuestions";
 import { POLL_INTERVAL_MS } from "../lib/firebase";
 import {
@@ -36,6 +37,7 @@ export default function Wall() {
   const [isCompact, setIsCompact] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [viewerId, setViewerId] = useState<string | null>(null);
 
   const filterTrackRef = useRef<HTMLDivElement | null>(null);
   const filterPillRef = useRef<HTMLDivElement | null>(null);
@@ -153,6 +155,20 @@ export default function Wall() {
 
   const featuredCards = filteredRows.filter((q) => q.status === "featured");
   const regularCards = activeTab === "featured" ? [] : filteredRows.filter((q) => q.status !== "featured");
+
+  // Viewer follows visual order (spotlight first, then community) so
+  // prev/next matches what the audience sees on the Wall.
+  const viewerList = useMemo(
+    () => [...featuredCards, ...regularCards],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [filteredRows, activeTab],
+  );
+  const viewerIndex = viewerId ? viewerList.findIndex((q) => q.id === viewerId) : -1;
+
+  // If the open question is filtered out or removed live, close quietly.
+  useEffect(() => {
+    if (viewerId && viewerIndex === -1) setViewerId(null);
+  }, [viewerId, viewerIndex]);
 
   return (
     <div className={`wall-page ${isFullscreen ? "projector-mode" : ""}`}>
@@ -453,6 +469,7 @@ export default function Wall() {
                 onUpvote={(id) => void handleUpvote(id)}
                 compact={isCompact}
                 index={i}
+                onOpen={() => setViewerId(q.id)}
               />
             ))}
           </div>
@@ -477,12 +494,27 @@ export default function Wall() {
                 onUpvote={(id) => void handleUpvote(id)}
                 compact={isCompact}
                 index={i + featuredCards.length}
+                onOpen={() => setViewerId(q.id)}
               />
             ))}
           </div>
         </section>
       )}
       </div>
+
+      {viewerId && viewerIndex >= 0 && (
+        <QuestionViewer
+          questions={viewerList}
+          index={viewerIndex}
+          votedIds={voted}
+          onUpvote={(id) => void handleUpvote(id)}
+          onIndexChange={(next) => {
+            const target = viewerList[next];
+            if (target) setViewerId(target.id);
+          }}
+          onClose={() => setViewerId(null)}
+        />
+      )}
     </div>
   );
 }
