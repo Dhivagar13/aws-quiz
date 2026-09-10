@@ -7,13 +7,11 @@ import { ShaderPass } from "three/addons/postprocessing/ShaderPass.js";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 
 type AmbientBackgroundProps = {
-  /** 0.25-1 density scale for attractor points. [inferred] default 1. */
-  density?: number;
   /** Override prefers-reduced-motion for tests / projector mode. */
   forceReducedMotion?: boolean;
 };
 
-export default function AmbientBackground({ density = 1, forceReducedMotion }: AmbientBackgroundProps) {
+export default function AmbientBackground({ forceReducedMotion }: AmbientBackgroundProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [webglFailed, setWebglFailed] = useState(false);
 
@@ -66,7 +64,7 @@ export default function AmbientBackground({ density = 1, forceReducedMotion }: A
     // pointer-events:none (see index.css .three-bg-canvas) and clicks pass to
     // UI. Controls run with enabled=false + autoRotate=true speed 0.6, so
     // damping/auto-orbit still apply via controls.update() without ever
-    // capturing pointer input. enableZoom=false + enablePan=false, 28-260.
+    // taking pointer input. enableZoom=false + enablePan=false, 28-260.
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
     controls.dampingFactor = 0.04;
@@ -148,15 +146,12 @@ export default function AmbientBackground({ density = 1, forceReducedMotion }: A
       Dp = 3.5,
       Ep = 0.25,
       Fp = 0.1;
-    // [inferred] Density scaling keeps projector + mobile GPUs smooth.
-    // Desktop default N 14000 exact; small screens halve the count.
-    const clampedDensity = Math.min(Math.max(density, 0.25), 1);
-    const effectiveDensity = clampedDensity * (isSmallScreen ? 0.5 : 1);
+    // Exact original attractor integration constants: N 14000, S 17, DT 0.008.
     const DT = 0.008,
-      N = Math.max(3500, Math.floor(14000 * effectiveDensity)),
+      N = 14000,
       S = 17.0;
-    // [inferred] Original tubular detail 8000 desktop, reduced on mobile.
-    const tubularSegments = isSmallScreen ? 4000 : 8000;
+    // Exact original tubular detail 8000 for all three tubes.
+    const tubularSegments = 8000;
 
     function deriv(x: number, y: number, z: number): [number, number, number] {
       return [
@@ -220,9 +215,9 @@ export default function AmbientBackground({ density = 1, forceReducedMotion }: A
 
     const curve = new THREE.CatmullRomCurve3(pts, false, "catmullrom", 0.5);
 
-    function attachColour(geo: THREE.BufferGeometry, nPoints: number | null, useVel: boolean) {
+    function attachColour(geo: THREE.BufferGeometry, fallbackCount: number | null, useVel: boolean) {
       const uv = geo.attributes.uv;
-      const cnt = uv ? uv.count : (nPoints ?? N);
+      const cnt = uv ? uv.count : (fallbackCount ?? N);
       const cA = new Float32Array(cnt * 3);
       const pA = new Float32Array(cnt);
       for (let i = 0; i < cnt; i++) {
@@ -488,7 +483,7 @@ export default function AmbientBackground({ density = 1, forceReducedMotion }: A
       midMat.dispose();
       outerMat.dispose();
     };
-  }, [density, forceReducedMotion]);
+  }, [forceReducedMotion]);
 
   const hudCorners = (
     <div id="hud" aria-hidden="true">
