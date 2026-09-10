@@ -4,9 +4,10 @@ import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
 import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
 import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
 import { ShaderPass } from "three/addons/postprocessing/ShaderPass.js";
+import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 
 type AmbientBackgroundProps = {
-  /** 0.25-1 density scale for attractor points + tube detail. [inferred] default 1. */
+  /** 0.25-1 density scale for attractor points. [inferred] default 1. */
   density?: number;
   /** Override prefers-reduced-motion for tests / projector mode. */
   forceReducedMotion?: boolean;
@@ -29,15 +30,6 @@ export default function AmbientBackground({ density = 1, forceReducedMotion }: A
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(50, width / height, 0.01, 900);
     camera.position.set(10, 6, 68);
-    // [inferred] Manual camera auto-orbit base + gentle drift amplitudes.
-    // No OrbitControls: canvas stays pointer-transparent so UI clicks pass
-    // through. Drift uses frozen time (st) so reduced-motion pauses camera
-    // and group together.
-    const CAM_BASE = new THREE.Vector3(10, 6, 68);
-    const CAM_DRIFT_SPEED = 0.07;
-    const CAM_DRIFT_X = 5.0;
-    const CAM_DRIFT_Y = 1.4;
-    const CAM_DRIFT_Z = 3.0;
     camera.lookAt(0, 0, 0);
 
     let renderer: THREE.WebGLRenderer;
@@ -53,7 +45,8 @@ export default function AmbientBackground({ density = 1, forceReducedMotion }: A
       return;
     }
 
-    // [inferred] College projector perf: cap DPR 1.5 desktop, 1.25 small screens.
+    // [inferred] Projector/mobile perf: DPR min(devicePixelRatio, 2) desktop,
+    // capped to 1.5 on small screens. Matches original renderer intent.
     let isSmallScreen = false;
     try {
       isSmallScreen =
@@ -63,11 +56,29 @@ export default function AmbientBackground({ density = 1, forceReducedMotion }: A
     } catch {
       isSmallScreen = false;
     }
-    const dprCap = isSmallScreen ? 1.25 : 1.5;
+    const dprCap = isSmallScreen ? 1.5 : 2.0;
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, dprCap));
     renderer.setSize(width, height);
     renderer.setClearColor(0x000000, 1);
     renderer.toneMapping = THREE.NoToneMapping;
+
+    // OrbitControls choice [inferred]: background-only, so the canvas stays
+    // pointer-events:none (see index.css .three-bg-canvas) and clicks pass to
+    // UI. Controls run with enabled=false + autoRotate=true speed 0.6, so
+    // damping/auto-orbit still apply via controls.update() without ever
+    // capturing pointer input. enableZoom=false + enablePan=false, 28-260.
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.04;
+    controls.enablePan = false;
+    controls.enableZoom = false;
+    controls.minDistance = 28;
+    controls.maxDistance = 260;
+    controls.autoRotate = true;
+    controls.autoRotateSpeed = 0.6;
+    controls.target.set(0, 0, 0);
+    controls.enabled = false;
+    controls.update();
 
     let composer: EffectComposer;
     try {
@@ -130,50 +141,6 @@ export default function AmbientBackground({ density = 1, forceReducedMotion }: A
     const rotGroup = new THREE.Group();
     scene.add(rotGroup);
 
-    // 3D Spinning Circles / Orbital Rings Group
-    const circleGroup = new THREE.Group();
-    rotGroup.add(circleGroup);
-
-    // 1. Spinning Torus Ring
-    const torusGeo = new THREE.TorusGeometry(26, 0.16, 16, 120);
-    const torusMat = new THREE.MeshBasicMaterial({
-      color: new THREE.Color(0.0, 1.0, 0.25),
-      transparent: true,
-      opacity: 0.7,
-    });
-    const torusMesh = new THREE.Mesh(torusGeo, torusMat);
-    torusMesh.rotation.x = Math.PI / 2;
-    circleGroup.add(torusMesh);
-
-    // 2. Spinning Inner Tech Ring
-    const ringGeo = new THREE.RingGeometry(18, 18.3, 64);
-    const ringMat = new THREE.MeshBasicMaterial({
-      color: new THREE.Color(0.2, 0.9, 0.4),
-      transparent: true,
-      opacity: 0.55,
-      side: THREE.DoubleSide,
-    });
-    const ringMesh = new THREE.Mesh(ringGeo, ringMat);
-    ringMesh.rotation.x = Math.PI / 2;
-    circleGroup.add(ringMesh);
-
-    // 3. Spinning Orbit Particle Points Circle
-    const circlePointsCount = 200;
-    const circlePts: THREE.Vector3[] = [];
-    for (let i = 0; i < circlePointsCount; i++) {
-      const theta = (i / circlePointsCount) * Math.PI * 2;
-      circlePts.push(new THREE.Vector3(Math.cos(theta) * 32, 0, Math.sin(theta) * 32));
-    }
-    const circlePtsGeo = new THREE.BufferGeometry().setFromPoints(circlePts);
-    const circlePtsMat = new THREE.PointsMaterial({
-      color: new THREE.Color(0.0, 1.0, 0.35),
-      size: 0.55,
-      transparent: true,
-      opacity: 0.85,
-    });
-    const circlePointsMesh = new THREE.Points(circlePtsGeo, circlePtsMat);
-    circleGroup.add(circlePointsMesh);
-
     // Chaotic Attractor Differential Equations
     const Ap = 0.95,
       Bp = 0.7,
@@ -181,14 +148,15 @@ export default function AmbientBackground({ density = 1, forceReducedMotion }: A
       Dp = 3.5,
       Ep = 0.25,
       Fp = 0.1;
-    // [inferred] Density scaling: prop 0.25-1 * 0.5 on small screens keeps
-    // projector + mobile GPUs smooth. Desktop full N 14000, mobile ~7000.
+    // [inferred] Density scaling keeps projector + mobile GPUs smooth.
+    // Desktop default N 14000 exact; small screens halve the count.
     const clampedDensity = Math.min(Math.max(density, 0.25), 1);
     const effectiveDensity = clampedDensity * (isSmallScreen ? 0.5 : 1);
     const DT = 0.008,
       N = Math.max(3500, Math.floor(14000 * effectiveDensity)),
       S = 17.0;
-    const tubularSegments = isSmallScreen ? 3000 : 6000;
+    // [inferred] Original tubular detail 8000 desktop, reduced on mobile.
+    const tubularSegments = isSmallScreen ? 4000 : 8000;
 
     function deriv(x: number, y: number, z: number): [number, number, number] {
       return [
@@ -380,7 +348,7 @@ export default function AmbientBackground({ density = 1, forceReducedMotion }: A
     allMats.push(midMat);
     rotGroup.add(new THREE.Mesh(midGeo, midMat));
 
-    const outerGeo = new THREE.TubeGeometry(curve, tubularSegments, 0.25, 8, false);
+    const outerGeo = new THREE.TubeGeometry(curve, tubularSegments, 0.25, 10, false);
     attachColour(outerGeo, null, false);
     const cArr = outerGeo.attributes.aColor.array as Float32Array;
     for (let i = 0; i < cArr.length; i++) cArr[i] *= 0.35;
@@ -389,14 +357,6 @@ export default function AmbientBackground({ density = 1, forceReducedMotion }: A
     const outerMat = makeSyntaxMat(5000.0, 10.0, 6.0, 0.5);
     allMats.push(outerMat);
     rotGroup.add(new THREE.Mesh(outerGeo, outerMat));
-
-    let mouseX = 0;
-    let mouseY = 0;
-    function handlePointerMove(e: PointerEvent) {
-      mouseX = (e.clientX / window.innerWidth - 0.5) * 2;
-      mouseY = (e.clientY / window.innerHeight - 0.5) * 2;
-    }
-    window.addEventListener("pointermove", handlePointerMove);
 
     function handleResize() {
       const w = window.innerWidth;
@@ -410,7 +370,7 @@ export default function AmbientBackground({ density = 1, forceReducedMotion }: A
 
     const clock = new THREE.Clock();
     // [inferred] Reduced-motion: freeze all orbital motion together so no
-    // single ring appears stuck while others move. Still renders + fades.
+    // tube layer appears stuck while others move. Still renders + fades.
     // Guarded + live-synced so WebGL and CSS pause together.
     function getReducedMotion(): boolean {
       try {
@@ -421,9 +381,11 @@ export default function AmbientBackground({ density = 1, forceReducedMotion }: A
       }
     }
     let prefersReducedMotion = forceReducedMotion ?? getReducedMotion();
+    controls.autoRotate = !prefersReducedMotion;
     let reducedMq: MediaQueryList | null = null;
     const onReducedMotionChange = (e: MediaQueryListEvent) => {
       if (forceReducedMotion === undefined) prefersReducedMotion = e.matches === true;
+      controls.autoRotate = !prefersReducedMotion;
     };
     try {
       reducedMq = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -450,7 +412,6 @@ export default function AmbientBackground({ density = 1, forceReducedMotion }: A
       try {
         const t = clock.getElapsedTime();
         // Freeze simulated time when reduced motion is requested; fade still progresses.
-        // When motion is allowed, st === t so group + camera advance every frame.
         const st = prefersReducedMotion ? 0 : t;
         const fade = Math.min(1.0, t / 3.0);
 
@@ -459,33 +420,13 @@ export default function AmbientBackground({ density = 1, forceReducedMotion }: A
           mat.uniforms.u_fadeIn.value = fade;
         }
 
-        // Attractor 3D rotation (continuous auto-spin; st advances when motion allowed)
-        rotGroup.rotation.y = st * 0.072 + mouseX * 0.15;
-        rotGroup.rotation.x = Math.sin(st * 0.053) * 0.4 + 0.28 + mouseY * 0.12;
+        // Original attractor rotation rates.
+        rotGroup.rotation.y = st * 0.072;
+        rotGroup.rotation.x = Math.sin(st * 0.053) * 0.4 + 0.28;
         rotGroup.rotation.z = Math.sin(st * 0.039) * 0.17;
 
-        // [inferred] Gentle manual camera auto-orbit (OrbitControls-free).
-        // Keeps canvas click-through; st-frozen under reduced-motion.
-        const driftA = st * CAM_DRIFT_SPEED;
-        camera.position.set(
-          CAM_BASE.x + Math.sin(driftA) * CAM_DRIFT_X + mouseX * 1.5,
-          CAM_BASE.y + Math.sin(driftA * 0.8) * CAM_DRIFT_Y - mouseY * 1.0,
-          CAM_BASE.z + Math.cos(driftA) * CAM_DRIFT_Z
-        );
-        camera.lookAt(0, 0, 0);
-
-        // Spinning circles rotation
-        circleGroup.rotation.y = st * 0.25;
-        circleGroup.rotation.z = Math.sin(st * 0.15) * 0.25;
-        // Each ring keeps its own opposing delta on a VISIBLE axis.
-        // Torus/Ring are rotationally symmetric about local Z, so a Z spin
-        // is invisible; continuous spin lives on Y (tumbling) with tilt
-        // wobble on X. Points counter-rotate against the group for depth.
-        torusMesh.rotation.y = st * 0.3;
-        torusMesh.rotation.x = Math.PI / 2 + Math.sin(st * 0.2) * 0.15;
-        ringMesh.rotation.y = -st * 0.45;
-        ringMesh.rotation.x = Math.PI / 2 + Math.sin(st * 0.18) * 0.12;
-        circlePointsMesh.rotation.y = -st * 0.2;
+        controls.autoRotate = !prefersReducedMotion;
+        controls.update();
 
         if (composer) {
           try {
@@ -519,7 +460,6 @@ export default function AmbientBackground({ density = 1, forceReducedMotion }: A
       } catch {
         // Best-effort.
       }
-      window.removeEventListener("pointermove", handlePointerMove);
       window.removeEventListener("resize", handleResize);
       try {
         if (reducedMq) {
@@ -534,14 +474,13 @@ export default function AmbientBackground({ density = 1, forceReducedMotion }: A
       } catch {
         // Listener cleanup is best-effort.
       }
+      try {
+        controls.dispose();
+      } catch {
+        // Best-effort.
+      }
       if (composer) composer.dispose();
       renderer.dispose();
-      torusGeo.dispose();
-      torusMat.dispose();
-      ringGeo.dispose();
-      ringMat.dispose();
-      circlePtsGeo.dispose();
-      circlePtsMat.dispose();
       coreGeo.dispose();
       midGeo.dispose();
       outerGeo.dispose();
@@ -550,6 +489,31 @@ export default function AmbientBackground({ density = 1, forceReducedMotion }: A
       outerMat.dispose();
     };
   }, [density, forceReducedMotion]);
+
+  const hudCorners = (
+    <div id="hud" aria-hidden="true">
+      <div className="corner" id="c-tl">
+        <svg viewBox="0 0 20 20" fill="none">
+          <path d="M1 19V1H19" stroke="currentColor" strokeWidth="1.5" />
+        </svg>
+      </div>
+      <div className="corner" id="c-tr">
+        <svg viewBox="0 0 20 20" fill="none">
+          <path d="M1 19V1H19" stroke="currentColor" strokeWidth="1.5" />
+        </svg>
+      </div>
+      <div className="corner" id="c-bl">
+        <svg viewBox="0 0 20 20" fill="none">
+          <path d="M1 19V1H19" stroke="currentColor" strokeWidth="1.5" />
+        </svg>
+      </div>
+      <div className="corner" id="c-br">
+        <svg viewBox="0 0 20 20" fill="none">
+          <path d="M1 19V1H19" stroke="currentColor" strokeWidth="1.5" />
+        </svg>
+      </div>
+    </div>
+  );
 
   if (webglFailed) {
     return (
@@ -566,28 +530,7 @@ export default function AmbientBackground({ density = 1, forceReducedMotion }: A
               "radial-gradient(ellipse at 50% 45%, rgba(0,255,65,0.16) 0%, rgba(0,60,20,0.28) 42%, #000000 78%)",
           }}
         />
-        <div id="hud" aria-hidden="true">
-          <div className="corner" id="c-tl">
-            <svg viewBox="0 0 20 20" fill="none">
-              <path d="M1 19V1H19" stroke="currentColor" strokeWidth="1.5" />
-            </svg>
-          </div>
-          <div className="corner" id="c-tr">
-            <svg viewBox="0 0 20 20" fill="none">
-              <path d="M1 19V1H19" stroke="currentColor" strokeWidth="1.5" />
-            </svg>
-          </div>
-          <div className="corner" id="c-bl">
-            <svg viewBox="0 0 20 20" fill="none">
-              <path d="M1 19V1H19" stroke="currentColor" strokeWidth="1.5" />
-            </svg>
-          </div>
-          <div className="corner" id="c-br">
-            <svg viewBox="0 0 20 20" fill="none">
-              <path d="M1 19V1H19" stroke="currentColor" strokeWidth="1.5" />
-            </svg>
-          </div>
-        </div>
+        {hudCorners}
       </>
     );
   }
@@ -595,35 +538,7 @@ export default function AmbientBackground({ density = 1, forceReducedMotion }: A
   return (
     <>
       <canvas ref={canvasRef} className="three-bg-canvas" aria-hidden="true" />
-      <div id="hud" aria-hidden="true">
-        <div className="corner" id="c-tl">
-          <svg viewBox="0 0 20 20" fill="none">
-            <path d="M1 19V1H19" stroke="currentColor" strokeWidth="1.5" />
-          </svg>
-        </div>
-        <div className="corner" id="c-tr">
-          <svg viewBox="0 0 20 20" fill="none">
-            <path d="M1 19V1H19" stroke="currentColor" strokeWidth="1.5" />
-          </svg>
-        </div>
-        <div className="corner" id="c-bl">
-          <svg viewBox="0 0 20 20" fill="none">
-            <path d="M1 19V1H19" stroke="currentColor" strokeWidth="1.5" />
-          </svg>
-        </div>
-        <div className="corner" id="c-br">
-          <svg viewBox="0 0 20 20" fill="none">
-            <path d="M1 19V1H19" stroke="currentColor" strokeWidth="1.5" />
-          </svg>
-        </div>
-
-        {/* HUD Spinning Circle Reticle */}
-        <div className="spinning-circle-container">
-          <div className="spinning-circle ring-outer" />
-          <div className="spinning-circle ring-inner" />
-          <div className="spinning-circle ring-radar" />
-        </div>
-      </div>
+      {hudCorners}
     </>
   );
 }
