@@ -1,18 +1,27 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
-import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
-import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
-import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
-import { ShaderPass } from "three/examples/jsm/postprocessing/ShaderPass.js";
+import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
+import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
+import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
+import { ShaderPass } from "three/addons/postprocessing/ShaderPass.js";
 
-export default function AmbientBackground() {
+type AmbientBackgroundProps = {
+  /** 0.25-1 density scale for attractor points + tube detail. [inferred] default 1. */
+  density?: number;
+  /** Override prefers-reduced-motion for tests / projector mode. */
+  forceReducedMotion?: boolean;
+};
+
+export default function AmbientBackground({ density = 1, forceReducedMotion }: AmbientBackgroundProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const [webglFailed, setWebglFailed] = useState(false);
 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
     let animId: number;
+    let disposed = false;
 
     const width = window.innerWidth;
     const height = window.innerHeight;
@@ -30,10 +39,22 @@ export default function AmbientBackground() {
         alpha: false,
       });
     } catch {
+      setWebglFailed(true);
       return;
     }
 
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    // [inferred] College projector perf: cap DPR 1.5 desktop, 1.25 small screens.
+    let isSmallScreen = false;
+    try {
+      isSmallScreen =
+        window.innerWidth < 768 ||
+        (typeof window.matchMedia === "function" &&
+          window.matchMedia("(max-width: 768px)").matches);
+    } catch {
+      isSmallScreen = false;
+    }
+    const dprCap = isSmallScreen ? 1.25 : 1.5;
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, dprCap));
     renderer.setSize(width, height);
     renderer.setClearColor(0x000000, 1);
     renderer.toneMapping = THREE.NoToneMapping;
@@ -150,9 +171,14 @@ export default function AmbientBackground() {
       Dp = 3.5,
       Ep = 0.25,
       Fp = 0.1;
+    // [inferred] Density scaling: prop 0.25-1 * 0.5 on small screens keeps
+    // projector + mobile GPUs smooth. Desktop full N 14000, mobile ~7000.
+    const clampedDensity = Math.min(Math.max(density, 0.25), 1);
+    const effectiveDensity = clampedDensity * (isSmallScreen ? 0.5 : 1);
     const DT = 0.008,
-      N = 14000,
+      N = Math.max(3500, Math.floor(14000 * effectiveDensity)),
       S = 17.0;
+    const tubularSegments = isSmallScreen ? 3000 : 6000;
 
     function deriv(x: number, y: number, z: number): [number, number, number] {
       return [
@@ -332,19 +358,19 @@ export default function AmbientBackground() {
 
     const allMats: THREE.ShaderMaterial[] = [];
 
-    const coreGeo = new THREE.TubeGeometry(curve, 6000, 0.04, 4, false);
+    const coreGeo = new THREE.TubeGeometry(curve, tubularSegments, 0.04, 4, false);
     attachColour(coreGeo, null, true);
     const coreMat = makeSyntaxMat(2500.0, 4.0, 15.0, 1.2);
     allMats.push(coreMat);
     rotGroup.add(new THREE.Mesh(coreGeo, coreMat));
 
-    const midGeo = new THREE.TubeGeometry(curve, 6000, 0.12, 6, false);
+    const midGeo = new THREE.TubeGeometry(curve, tubularSegments, 0.12, 6, false);
     attachColour(midGeo, null, true);
     const midMat = makeSyntaxMat(3500.0, 6.0, 10.0, 0.9);
     allMats.push(midMat);
     rotGroup.add(new THREE.Mesh(midGeo, midMat));
 
-    const outerGeo = new THREE.TubeGeometry(curve, 6000, 0.25, 8, false);
+    const outerGeo = new THREE.TubeGeometry(curve, tubularSegments, 0.25, 8, false);
     attachColour(outerGeo, null, false);
     const cArr = outerGeo.attributes.aColor.array as Float32Array;
     for (let i = 0; i < cArr.length; i++) cArr[i] *= 0.35;
@@ -384,10 +410,10 @@ export default function AmbientBackground() {
         return false;
       }
     }
-    let prefersReducedMotion = getReducedMotion();
+    let prefersReducedMotion = forceReducedMotion ?? getReducedMotion();
     let reducedMq: MediaQueryList | null = null;
     const onReducedMotionChange = (e: MediaQueryListEvent) => {
-      prefersReducedMotion = e.matches === true;
+      if (forceReducedMotion === undefined) prefersReducedMotion = e.matches === true;
     };
     try {
       reducedMq = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -403,6 +429,7 @@ export default function AmbientBackground() {
     }
 
     function animate() {
+      if (disposed) return;
       animId = requestAnimationFrame(animate);
       try {
         const t = clock.getElapsedTime();
@@ -454,6 +481,7 @@ export default function AmbientBackground() {
     animate();
 
     return () => {
+      disposed = true;
       cancelAnimationFrame(animId);
       window.removeEventListener("pointermove", handlePointerMove);
       window.removeEventListener("resize", handleResize);
@@ -485,7 +513,48 @@ export default function AmbientBackground() {
       midMat.dispose();
       outerMat.dispose();
     };
-  }, []);
+  }, [density, forceReducedMotion]);
+
+  if (webglFailed) {
+    return (
+      <>
+        <div
+          className="three-bg-canvas"
+          aria-hidden="true"
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 0,
+            pointerEvents: "none",
+            background:
+              "radial-gradient(ellipse at 50% 45%, rgba(0,255,65,0.16) 0%, rgba(0,60,20,0.28) 42%, #000000 78%)",
+          }}
+        />
+        <div id="hud" aria-hidden="true">
+          <div className="corner" id="c-tl">
+            <svg viewBox="0 0 20 20" fill="none">
+              <path d="M1 19V1H19" stroke="currentColor" strokeWidth="1.5" />
+            </svg>
+          </div>
+          <div className="corner" id="c-tr">
+            <svg viewBox="0 0 20 20" fill="none">
+              <path d="M1 19V1H19" stroke="currentColor" strokeWidth="1.5" />
+            </svg>
+          </div>
+          <div className="corner" id="c-bl">
+            <svg viewBox="0 0 20 20" fill="none">
+              <path d="M1 19V1H19" stroke="currentColor" strokeWidth="1.5" />
+            </svg>
+          </div>
+          <div className="corner" id="c-br">
+            <svg viewBox="0 0 20 20" fill="none">
+              <path d="M1 19V1H19" stroke="currentColor" strokeWidth="1.5" />
+            </svg>
+          </div>
+        </div>
+      </>
+    );
+  }
 
   return (
     <>
