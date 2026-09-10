@@ -35,7 +35,7 @@ export default function AmbientBackground() {
 
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.setSize(width, height);
-    renderer.setClearColor(0x000000, 1);
+    renderer.setClearColor(0x0a0f0d, 1);
     renderer.toneMapping = THREE.NoToneMapping;
 
     let composer: EffectComposer;
@@ -103,10 +103,10 @@ export default function AmbientBackground() {
     const circleGroup = new THREE.Group();
     rotGroup.add(circleGroup);
 
-    // 1. Spinning Torus Ring
+    // 1. Spinning Torus Ring - AWS orange primary
     const torusGeo = new THREE.TorusGeometry(26, 0.16, 16, 120);
     const torusMat = new THREE.MeshBasicMaterial({
-      color: new THREE.Color(0.0, 1.0, 0.25),
+      color: new THREE.Color("#FF9900"),
       transparent: true,
       opacity: 0.7,
     });
@@ -114,10 +114,10 @@ export default function AmbientBackground() {
     torusMesh.rotation.x = Math.PI / 2;
     circleGroup.add(torusMesh);
 
-    // 2. Spinning Inner Tech Ring
+    // 2. Spinning Inner Tech Ring - warm ember secondary
     const ringGeo = new THREE.RingGeometry(18, 18.3, 64);
     const ringMat = new THREE.MeshBasicMaterial({
-      color: new THREE.Color(0.2, 0.9, 0.4),
+      color: new THREE.Color("#FF6B00"),
       transparent: true,
       opacity: 0.55,
       side: THREE.DoubleSide,
@@ -135,7 +135,7 @@ export default function AmbientBackground() {
     }
     const circlePtsGeo = new THREE.BufferGeometry().setFromPoints(circlePts);
     const circlePtsMat = new THREE.PointsMaterial({
-      color: new THREE.Color(0.0, 1.0, 0.35),
+      color: new THREE.Color("#FF9900"),
       size: 0.55,
       transparent: true,
       opacity: 0.85,
@@ -199,13 +199,13 @@ export default function AmbientBackground() {
     const nVel = velMags.map((v) => v / maxV);
 
     const PAL = [
-      new THREE.Color(0.0, 0.15, 0.02),
-      new THREE.Color(0.0, 0.45, 0.08),
-      new THREE.Color(0.0, 0.85, 0.2),
-      new THREE.Color(0.4, 1.0, 0.5),
-      new THREE.Color(0.0, 0.85, 0.2),
-      new THREE.Color(0.0, 0.45, 0.08),
-      new THREE.Color(0.0, 0.15, 0.02),
+      new THREE.Color("#2A1200"),
+      new THREE.Color("#7A2E00"),
+      new THREE.Color("#FF6B00"),
+      new THREE.Color("#FF9900"),
+      new THREE.Color("#FF6B00"),
+      new THREE.Color("#7A2E00"),
+      new THREE.Color("#2A1200"),
     ];
 
     function palSample(t: number) {

@@ -214,7 +214,7 @@
     max-height: 100%;
     pointer-events: none;
     z-index: 0;
-    background: #000000;
+    background: #0a0f0d;
   }
 
   #hud {
@@ -235,7 +235,7 @@
     position: absolute;
     width: 20px;
     height: 20px;
-    color: #00ff41;
+    color: #ff9900;
     animation: matrixGlow 2s ease-in-out infinite alternate;
   }
 
@@ -270,11 +270,11 @@
   @keyframes matrixGlow {
     0% {
       opacity: 0.4;
-      filter: drop-shadow(0 0 2px rgba(0, 255, 65, 0.5));
+      filter: drop-shadow(0 0 2px rgba(255, 153, 0, 0.5));
     }
     100% {
       opacity: 1;
-      filter: drop-shadow(0 0 8px #00ff41) drop-shadow(0 0 15px #00ff41);
+      filter: drop-shadow(0 0 8px #ff9900) drop-shadow(0 0 15px #ff9900);
     }
   }
 
@@ -298,26 +298,26 @@
 
   .spinning-circle.ring-outer {
     inset: 0;
-    border: 1.5px dashed rgba(0, 255, 65, 0.5);
-    box-shadow: 0 0 30px rgba(0, 255, 65, 0.25), inset 0 0 30px rgba(0, 255, 65, 0.15);
+    border: 1.5px dashed rgba(255, 153, 0, 0.5);
+    box-shadow: 0 0 30px rgba(255, 153, 0, 0.25), inset 0 0 30px rgba(255, 153, 0, 0.15);
     animation: spinCircle 28s linear infinite;
   }
 
   .spinning-circle.ring-inner {
     inset: 14%;
-    border: 1.5px dotted rgba(0, 255, 65, 0.4);
-    border-top: 2px solid #00ff41;
-    border-bottom: 2px solid #00ff41;
-    box-shadow: 0 0 20px rgba(0, 255, 65, 0.2);
+    border: 1.5px dotted rgba(255, 153, 0, 0.4);
+    border-top: 2px solid #ff9900;
+    border-bottom: 2px solid #ff9900;
+    box-shadow: 0 0 20px rgba(255, 153, 0, 0.2);
     animation: spinCircleRev 18s linear infinite;
   }
 
   .spinning-circle.ring-radar {
     inset: 28%;
-    border: 1px solid rgba(0, 255, 65, 0.25);
-    border-left: 2px solid #00ff41;
-    border-right: 2px solid rgba(0, 255, 65, 0.8);
-    box-shadow: 0 0 15px rgba(0, 255, 65, 0.15);
+    border: 1px solid rgba(255, 153, 0, 0.25);
+    border-left: 2px solid #ff9900;
+    border-right: 2px solid rgba(255, 153, 0, 0.8);
+    box-shadow: 0 0 15px rgba(255, 153, 0, 0.15);
     animation: spinCircle 10s linear infinite;
   }
 
