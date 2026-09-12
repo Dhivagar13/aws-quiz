@@ -2798,6 +2798,32 @@
     display: flex;
     flex-direction: column;
     gap: 12px;
+    /* contrast fix: solid fallback under glass translucency, explicit ink for AA */
+    background-color: #0e1712;
+    color: #f0f6f2;
+    opacity: 1;
+    filter: none;
+  }
+
+  /* contrast fix: never let admin text inherit transparent/dim/blurred state */
+  .admin-question-card .admin-card-body,
+  .admin-question-card .handle,
+  .admin-question-card .admin-card-meta {
+    opacity: 1;
+    filter: none;
+    mix-blend-mode: normal;
+  }
+
+  /* contrast fix: visible selection on dark glass */
+  .admin-question-card::selection,
+  .admin-question-card ::selection {
+    background: rgba(61, 255, 136, 0.85);
+    color: #041208;
+  }
+
+  /* contrast fix: featured rows keep light body, gold stays on chrome only */
+  .admin-question-card.featured .admin-card-body {
+    color: #fdf6e7;
   }
 
   .admin-card-header {
@@ -2836,27 +2862,36 @@
   }
 
   .pill-featured {
-    background: rgba(245, 158, 11, 0.18);
-    border: 1px solid rgba(245, 158, 11, 0.5);
-    color: var(--gold);
+    background: rgba(245, 158, 11, 0.22);
+    border: 1px solid rgba(245, 158, 11, 0.6);
+    color: #ffc14d;
   }
 
   .pill-rejected {
-    background: rgba(255, 92, 92, 0.15);
-    border: 1px solid rgba(255, 92, 92, 0.4);
-    color: var(--danger);
+    background: rgba(255, 92, 92, 0.18);
+    border: 1px solid rgba(255, 92, 92, 0.45);
+    color: #ff8080;
+  }
+
+  .admin-question-card .handle {
+    color: #c9d9cf;
+    background: rgba(255, 255, 255, 0.06);
+    border-color: rgba(255, 255, 255, 0.14);
   }
 
   .admin-card-meta {
     display: flex;
     gap: 14px;
     font-size: 12px;
-    color: var(--muted);
+    color: #a8c0af;
   }
 
   .admin-card-body {
     font-size: 17px;
     line-height: 1.45;
+    font-weight: 500;
+    color: #edf5ef;
+    overflow-wrap: anywhere;
   }
 
   .admin-actions-bar {
