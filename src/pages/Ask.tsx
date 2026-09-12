@@ -2,7 +2,7 @@ import { Link, useOutletContext, useSearchParams } from "react-router-dom";
 import QuestionForm from "../components/QuestionForm";
 import { useQuestions } from "../hooks/useQuestions";
 import { isFirebaseConfigured } from "../lib/firebase";
-import { ShieldCheck, Layers, QrCode, Sparkles, Check, ChevronRight, HelpCircle } from "lucide-react";
+import { ShieldCheck, Shield, Layers, QrCode, Sparkles, Check, ChevronRight, HelpCircle } from "lucide-react";
 
 interface ContextType {
   openQrModal: () => void;
@@ -55,6 +55,18 @@ export default function Ask() {
             </Link>
           </div>
         )}
+
+        <div className="ask-admin-footer">
+          <Link
+            to="/admin"
+            className="btn ghost small ask-admin-btn"
+            aria-label="Open moderator sign-in"
+            title="Moderator sign-in"
+          >
+            <Shield size={14} aria-hidden="true" />
+            <span>Moderator Deck</span>
+          </Link>
+        </div>
       </div>
 
       <aside className="ask-sidebar">

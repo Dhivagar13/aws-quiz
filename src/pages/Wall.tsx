@@ -19,6 +19,7 @@ import {
   Radio,
   PlusCircle,
   MessageSquare,
+  Shield,
 } from "lucide-react";
 
 type FilterTab = "all" | "top" | "featured" | "recent";
@@ -276,6 +277,16 @@ export default function Wall() {
               <RefreshCw size={16} />
               <span className="btn-label-desktop">Sync</span>
             </button>
+
+            <Link
+              to="/admin"
+              className="toolbar-btn wall-admin-btn"
+              title="Moderator sign-in"
+              aria-label="Open moderator sign-in"
+            >
+              <Shield size={16} aria-hidden="true" />
+              <span className="btn-label-desktop">Admin</span>
+            </Link>
           </div>
         </div>
 

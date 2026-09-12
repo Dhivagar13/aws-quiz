@@ -3,7 +3,7 @@ import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 import mecLogo from "../assets/mec-logo.jpg";
 import AmbientBackground from "./AmbientBackground";
 import QRCodeModal from "./QRCodeModal";
-import { MessageSquarePlus, Layers, QrCode, Cloud, Radio } from "lucide-react";
+import { MessageSquarePlus, Layers, QrCode, Cloud, Radio, Shield } from "lucide-react";
 
 export default function Layout() {
   const [showQrModal, setShowQrModal] = useState(false);
@@ -121,6 +121,20 @@ export default function Layout() {
                 <span className="qr-text">QR</span>
               </div>
             </button>
+
+            <div className="liquid-divider" aria-hidden="true" />
+
+            <Link
+              to="/admin"
+              className="liquid-action-btn admin-redirect-btn"
+              aria-label="Open moderator sign-in"
+              title="Moderator sign-in"
+            >
+              <span className="btn-content">
+                <Shield size={15} aria-hidden="true" />
+                <span className="admin-label">Admin</span>
+              </span>
+            </Link>
           </nav>
         </div>
       </header>
