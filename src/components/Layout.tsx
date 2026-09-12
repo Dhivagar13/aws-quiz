@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { NavLink, Outlet, useLocation } from "react-router-dom";
+import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 import mecLogo from "../assets/mec-logo.jpg";
 import AmbientBackground from "./AmbientBackground";
 import QRCodeModal from "./QRCodeModal";
@@ -53,8 +53,9 @@ export default function Layout() {
           <NavLink className="brand" to="/" aria-label="SBG MEC Q and A home">
             <img src={mecLogo} alt="Mailam Engineering College banner" />
             <span className="brand-lockup">
-              <strong>AWS SBG · MEC Live Q&amp;A</strong>
-              <span>Anonymous · Moderated · Projector Wall</span>
+              <strong className="brand-title-desktop">AWS SBG · MEC Live Q&amp;A</strong>
+              <strong className="brand-title-mobile">AWS SBG</strong>
+              <span className="brand-sub">Anonymous · Moderated</span>
             </span>
           </NavLink>
 
@@ -135,6 +136,14 @@ export default function Layout() {
           </div>
           <div className="footer-right">
             <span>Powered by AWS SBG &amp; MEC CSE/IT</span>
+            <Link
+              to="/admin"
+              aria-label="Moderator sign-in"
+              title="Moderator sign-in"
+              style={{ fontSize: "11px", color: "rgba(158, 181, 165, 0.55)", textDecoration: "none", marginLeft: "12px" }}
+            >
+              Moderator
+            </Link>
           </div>
         </div>
       </footer>

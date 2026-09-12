@@ -1,4 +1,4 @@
-import { Link, useOutletContext } from "react-router-dom";
+import { Link, useOutletContext, useSearchParams } from "react-router-dom";
 import QuestionForm from "../components/QuestionForm";
 import { useQuestions } from "../hooks/useQuestions";
 import { isFirebaseConfigured } from "../lib/firebase";
@@ -11,6 +11,8 @@ interface ContextType {
 export default function Ask() {
   const { submit } = useQuestions("wall");
   const { openQrModal } = useOutletContext<ContextType>();
+  const [searchParams] = useSearchParams();
+  const showAdminEntry = searchParams.get("admin") === "1";
 
   return (
     <div className="ask-layout">
@@ -42,6 +44,15 @@ export default function Ask() {
             <code>VITE_FIREBASE_AUTH_DOMAIN</code>, <code>VITE_FIREBASE_PROJECT_ID</code>, and{" "}
             <code>VITE_FIREBASE_APP_ID</code> to <code>.env</code> and restart. Zero questions shown
             until configured.
+          </div>
+        )}
+
+        {showAdminEntry && (
+          <div className="notice enter" style={{ marginTop: "12px" }}>
+            <span style={{ fontSize: "13px", color: "var(--ink-muted)" }}>Owner entry:</span>{" "}
+            <Link to="/admin" style={{ fontSize: "13px" }}>
+              Open Moderator Deck
+            </Link>
           </div>
         )}
       </div>
